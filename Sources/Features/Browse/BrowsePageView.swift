@@ -78,7 +78,7 @@ final class BrowsePageModel: ObservableObject {
 /// Shelves for a `BrowsePageModel`; songs-only sections render as a list-like grid of cards.
 /// `header` scrolls above the sections (Home puts the user's mixes there).
 struct BrowsePageView<Header: View>: View {
-    let model: BrowsePageModel
+    @ObservedObject var model: BrowsePageModel
     var emptyMessage = "Nothing here yet."
     @ViewBuilder var header: Header
 
