@@ -2,7 +2,7 @@
 import BackgroundTasks
 #endif
 import Foundation
-import Observation
+import Combine
 import UserNotifications
 
 /// Watches followed artists for new albums and singles, with no server: a background app
@@ -10,8 +10,7 @@ import UserNotifications
 /// to the front and no check ran for most of a day. New releases feed the Home shelf and,
 /// when enabled, one local notification at 8:00.
 @MainActor
-@Observable
-final class NewReleaseWatcher {
+final class NewReleaseWatcher: ObservableObject {
     static let taskIdentifier = "dev.emoona.kaset.newReleases"
     static let notificationsStorageKey = "settings.newReleaseNotifications"
 
@@ -22,11 +21,11 @@ final class NewReleaseWatcher {
     /// Most played artists, checked on every run before the others.
     private static let priorityCount = 20
 
-    private(set) var state: NewReleaseState
-    private(set) var isChecking = false
+    @Published private(set) var state: NewReleaseState
+    @Published private(set) var isChecking = false
 
-    @ObservationIgnored private let fileURL: URL
-    @ObservationIgnored private let log = SpikeLog.shared
+    private let fileURL: URL
+    private let log = SpikeLog.shared
 
     /// On unless turned off in Settings.
     static var notificationsEnabled: Bool {
@@ -288,17 +287,16 @@ final class NewReleaseWatcher {
 
 /// Notification taps, handed from the notification delegate to the screens.
 @MainActor
-@Observable
-final class NotificationRouter {
+final class NotificationRouter: ObservableObject {
     static let shared = NotificationRouter()
     nonisolated static let albumIdKey = "albumId"
     nonisolated static let albumTitleKey = "albumTitle"
     nonisolated static let videoIdKey = "videoId"
 
     /// Album to open on Home, or one-track single to play; Home clears it once handled.
-    var pendingEntity: MediaEntity?
+    @Published var pendingEntity: MediaEntity?
     /// Bumped by a tap with several releases: Home comes to the front, where the shelf lists them.
-    var homeRequest = 0
+    @Published var homeRequest = 0
 
     /// An item to show from outside the app: Home plays a song and pushes anything else.
     func open(_ entity: MediaEntity) {

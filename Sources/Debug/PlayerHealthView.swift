@@ -34,7 +34,7 @@ struct PlayerHealthView: View {
         .task {
             while !Task.isCancelled {
                 await self.player.checkHealth()
-                try? await Task.sleep(for: .seconds(3))
+                try? await Task.sleep(nanoseconds: 3000000000)
             }
         }
     }

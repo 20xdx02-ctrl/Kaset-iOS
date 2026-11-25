@@ -3,9 +3,9 @@ import AVFoundation
 import CallKit
 import UIKit
 #endif
+import Combine
 import MediaPlayer
 import Network
-import Observation
 import WebKit
 
 @MainActor
@@ -23,85 +23,84 @@ private final class MessageProxy: NSObject, WKScriptMessageHandler {
 /// Commands are forwarded to the page; `state` only changes when the page reports back.
 /// Evolved from the spike's `PlayerModel` (evidence in `docs/spike-findings.md`).
 @MainActor
-@Observable
-final class WebPlayer: NSObject {
+final class WebPlayer: NSObject, ObservableObject {
     static let homeURL = URL(string: "https://music.youtube.com")!
     nonisolated static let desktopUserAgent =
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
 
-    private(set) var webView: WKWebView
-    private(set) var state = PlaybackState() {
+    @Published private(set) var webView: WKWebView
+    @Published private(set) var state = PlaybackState() {
         didSet { self.refreshIdentity() }
     }
     /// Changes only when the track, list or play state does (see `PlaybackIdentity`).
-    private(set) var identity = PlaybackIdentity()
+    @Published private(set) var identity = PlaybackIdentity()
     /// Result of the last play-next attempt: `(videoId, success, reason)`.
-    private(set) var lastQueueResult: (videoId: String, success: Bool, reason: String)?
-    private(set) var generation = 0
+    @Published private(set) var lastQueueResult: (videoId: String, success: Bool, reason: String)?
+    @Published private(set) var generation = 0
     /// True while a queue reorder is rewriting the page's queue.
-    private(set) var isReorderingQueue = false
+    @Published private(set) var isReorderingQueue = false
     /// Short message about the last queue operation (shown briefly by the shell).
-    private(set) var queueNotice: String?
+    @Published private(set) var queueNotice: String?
     /// When the page last reported anything, and the page's address; for the debug readout.
-    private(set) var lastMessageAt: Date?
-    private(set) var pageURL: String?
+    @Published private(set) var lastMessageAt: Date?
+    @Published private(set) var pageURL: String?
     /// Last player health probe (run a few seconds after each track change, or on demand).
-    private(set) var healthReport: PlayerHealthReport?
+    @Published private(set) var healthReport: PlayerHealthReport?
     /// Called with every state the page reports (the listening recap counts plays from it).
-    @ObservationIgnored var onStateChange: ((PlaybackState, Date) -> Void)?
+    var onStateChange: ((PlaybackState, Date) -> Void)?
 
-    @ObservationIgnored private let log = SpikeLog.shared
-    @ObservationIgnored private let proxy = MessageProxy()
+    private let log = SpikeLog.shared
+    private let proxy = MessageProxy()
     /// The active account's data store; read each time the web view is rebuilt.
-    @ObservationIgnored private let dataStore: @MainActor () -> WKWebsiteDataStore
-    @ObservationIgnored private let nowPlaying = NowPlayingPublisher()
-    @ObservationIgnored private var lastBeat: Date?
-    @ObservationIgnored private var lastRemoteCommand = Date.distantPast
-    @ObservationIgnored private var queueAttempt = 0
-    @ObservationIgnored private var pendingQueueResults: [Int: CheckedContinuation<(success: Bool, reason: String), Never>] = [:]
+    private let dataStore: @MainActor () -> WKWebsiteDataStore
+    private let nowPlaying = NowPlayingPublisher()
+    private var lastBeat: Date?
+    private var lastRemoteCommand = Date.distantPast
+    private var queueAttempt = 0
+    private var pendingQueueResults: [Int: CheckedContinuation<(success: Bool, reason: String), Never>] = [:]
     /// Remaining automatic retries for user-initiated queue operations, by video id.
-    @ObservationIgnored private var queueRetries: [String: Int] = [:]
-    @ObservationIgnored private var lastRecovery = Date.distantPast
-    @ObservationIgnored private var lastSavedAt = Date.distantPast
-    @ObservationIgnored private var lastEvent = ""
-    @ObservationIgnored private let pathMonitor = NWPathMonitor()
+    private var queueRetries: [String: Int] = [:]
+    private var lastRecovery = Date.distantPast
+    private var lastSavedAt = Date.distantPast
+    private var lastEvent = ""
+    private let pathMonitor = NWPathMonitor()
     #if os(iOS)
-    @ObservationIgnored private let callObserver = CXCallObserver()
-    @ObservationIgnored private var callDelegate: CallDelegate?
+    private let callObserver = CXCallObserver()
+    private var callDelegate: CallDelegate?
     #endif
     /// A phone call is in progress and playback was paused for it.
-    @ObservationIgnored private var isInCall = false
-    @ObservationIgnored private var pausedForCall = false
+    private var isInCall = false
+    private var pausedForCall = false
     /// Set when the app goes to the background while playing: iOS/WebKit can pause the media at
     /// that moment even though background audio is allowed; we resume it right away.
-    @ObservationIgnored private var playingWhenBackgrounded = false
-    @ObservationIgnored private var backgroundedAt = Date.distantPast
-    @ObservationIgnored private var resumedAfterBackgroundPause = false
+    private var playingWhenBackgrounded = false
+    private var backgroundedAt = Date.distantPast
+    private var resumedAfterBackgroundPause = false
     /// Increments on every page event; lets delayed checks know nothing newer happened.
-    @ObservationIgnored private var eventSerial = 0
+    private var eventSerial = 0
     /// The page was told to stand down for a call (`setInterrupted(true)`) and not yet released.
-    @ObservationIgnored private var pageIsInterrupted = false
-    @ObservationIgnored private var wasOffline = false
-    @ObservationIgnored private var isOnline = true
+    private var pageIsInterrupted = false
+    private var wasOffline = false
+    private var isOnline = true
     /// Playing when the network dropped: resume once it is back.
-    @ObservationIgnored private var playingWhenWentOffline = false
-    @ObservationIgnored private var wentOfflineAt = Date.distantPast
+    private var playingWhenWentOffline = false
+    private var wentOfflineAt = Date.distantPast
     /// A recovery was skipped because there was no network to reload with.
-    @ObservationIgnored private var recoveryPendingNetwork = false
-    @ObservationIgnored private var lastUserPause = Date.distantPast
-    @ObservationIgnored private var lastSeekCommand = Date.distantPast
+    private var recoveryPendingNetwork = false
+    private var lastUserPause = Date.distantPast
+    private var lastSeekCommand = Date.distantPast
     /// Why the audio quality is temporarily lowered (`nil`: the user's setting applies).
-    @ObservationIgnored private var lowQualityReason: String?
-    @ObservationIgnored private var lastUnderrun = Date.distantPast
+    private var lowQualityReason: String?
+    private var lastUnderrun = Date.distantPast
     /// The media element reported `error` (seen when the device locks while paused) and has
     /// not played since; play must reload the track instead of pressing play on it.
-    @ObservationIgnored private var mediaFailed = false
-    @ObservationIgnored private var lastBufferLog = Date.distantPast
-    @ObservationIgnored private var positionBeforeError: TimeInterval = 0
+    private var mediaFailed = false
+    private var lastBufferLog = Date.distantPast
+    private var positionBeforeError: TimeInterval = 0
     /// True while the mini player shows the last session and the page has no media yet.
-    @ObservationIgnored private var isShowingRestoredSession = false
+    private var isShowingRestoredSession = false
     /// A music.youtube.com document has finished loading in the current web view.
-    @ObservationIgnored private var hasLoadedPage = false
+    private var hasLoadedPage = false
 
     init(dataStore: @escaping @MainActor () -> WKWebsiteDataStore = { .default() }) {
         self.dataStore = dataStore
@@ -231,7 +230,7 @@ final class WebPlayer: NSObject {
                     self.log.log("cmd", "\(via) watch v=\(videoId) list=\(playlistId ?? "-")")
                     if via != "resolveCommand" { self.logRouterCandidatesOnce() }
                     // An event nobody handles fails silently: load the page if the track did not change.
-                    try? await Task.sleep(for: .seconds(3))
+                    try? await Task.sleep(nanoseconds: 3000000000)
                     // A newer play request owns the page now; checking this one would reload a stale track.
                     guard request == self.playRequest, self.state.videoId != videoId else { return }
                     self.log.log("cmd", "\(via) did not start \(videoId), loading the watch page")
@@ -244,9 +243,9 @@ final class WebPlayer: NSObject {
         self.webView.load(URLRequest(url: url))
     }
 
-    @ObservationIgnored private var loggedRouterCandidates = false
+    private var loggedRouterCandidates = false
     /// Increments on every `play`; lets the delayed navigation check tell it was superseded.
-    @ObservationIgnored private var playRequest = 0
+    private var playRequest = 0
 
     private func logRouterCandidatesOnce() {
         guard !self.loggedRouterCandidates else { return }
@@ -307,7 +306,7 @@ final class WebPlayer: NSObject {
     private func scheduleHealthCheck() {
         guard let videoId = self.state.videoId else { return }
         Task { [weak self] in
-            try? await Task.sleep(for: .seconds(6))
+            try? await Task.sleep(nanoseconds: 6000000000)
             guard let self, self.state.videoId == videoId else { return }
             await self.checkHealth()
         }
@@ -335,7 +334,7 @@ final class WebPlayer: NSObject {
                     return
                 }
                 self.log.log("cmd", "\(via) shuffled list=\(playlistId)")
-                try? await Task.sleep(for: .seconds(3))
+                try? await Task.sleep(nanoseconds: 3000000000)
                 guard request == self.playRequest else { return }
                 if self.state.videoId == nil || self.state.videoId == previousVideo || self.state.listId != playlistId {
                     self.log.log("cmd", "shuffled start did not take, falling back")
@@ -350,13 +349,13 @@ final class WebPlayer: NSObject {
         let request = self.playRequest
         Task {
             for _ in 0 ..< 20 {
-                try? await Task.sleep(for: .seconds(1))
+                try? await Task.sleep(nanoseconds: 1000000000)
                 guard request == self.playRequest else { return }
                 guard self.state.hasMedia, self.state.isPlaying || self.state.duration > 0 else { continue }
                 if !self.state.isShuffleEnabled { self.toggleShuffle() }
                 // The list started on its first track; shuffle only reorders what follows.
                 if videoId == nil {
-                    try? await Task.sleep(for: .milliseconds(600))
+                    try? await Task.sleep(nanoseconds: 600000000)
                     if request == self.playRequest { self.next() }
                 }
                 return
@@ -443,7 +442,7 @@ final class WebPlayer: NSObject {
     private func postNotice(_ text: String) {
         self.queueNotice = text
         Task { [weak self] in
-            try? await Task.sleep(for: .seconds(3.5))
+            try? await Task.sleep(nanoseconds: 3500000000)
             if self?.queueNotice == text { self?.queueNotice = nil }
         }
     }
@@ -461,14 +460,14 @@ final class WebPlayer: NSObject {
                 self.pendingQueueResults[id] = continuation
                 self.webView.evaluateJavaScript(script, completionHandler: nil)
                 Task { [weak self] in
-                    try? await Task.sleep(for: .seconds(12))
+                    try? await Task.sleep(nanoseconds: 12000000000)
                     self?.pendingQueueResults.removeValue(forKey: id)?.resume(returning: (false, "timeout"))
                 }
             }
             if result.success { return true }
             self.log.log("queue", "insert \(videoId) attempt \(attempt): \(result.reason)")
             guard Self.transientQueueFailures.contains(result.reason) else { return false }
-            try? await Task.sleep(for: .milliseconds(250))
+            try? await Task.sleep(nanoseconds: 250000000)
         }
         return false
     }
@@ -691,7 +690,7 @@ final class WebPlayer: NSObject {
                 self.queueRetries[id] = left - 1
                 self.log.log("queue", "retrying \(id) after \(reason) (\(left - 1) left)")
                 Task { [weak self] in
-                    try? await Task.sleep(for: .milliseconds(600))
+                    try? await Task.sleep(nanoseconds: 600000000)
                     guard let self else { return }
                     if isAdd {
                         self.webView.evaluateJavaScript(PlayerScripts.addToQueue(videoId: id), completionHandler: nil)
@@ -833,7 +832,7 @@ final class WebPlayer: NSObject {
     private func scheduleRecoveryCheck(after event: String) {
         let serial = self.eventSerial
         Task { [weak self] in
-            try? await Task.sleep(for: .seconds(8))
+            try? await Task.sleep(nanoseconds: 8000000000)
             guard let self else { return }
             // Any newer page event (e.g. the next track starting to load) cancels the check:
             // skipping quickly through tracks emits `emptied` repeatedly and is not a failure.
@@ -891,11 +890,11 @@ final class WebPlayer: NSObject {
         self.recoveryPendingNetwork = false
         guard self.state.hasMedia, wasPlaying || pending else { return }
         Task { [weak self] in
-            try? await Task.sleep(for: .seconds(4))
+            try? await Task.sleep(nanoseconds: 4000000000)
             guard let self, !self.state.isPlaying, self.lastUserPause < self.wentOfflineAt else { return }
             self.log.log("network", "back, playback still stopped: play")
             self.command("play")
-            try? await Task.sleep(for: .seconds(6))
+            try? await Task.sleep(nanoseconds: 6000000000)
             guard !self.state.isPlaying, self.lastUserPause < self.wentOfflineAt else { return }
             self.recover(reason: "network back")
         }
@@ -1078,7 +1077,7 @@ final class WebPlayer: NSObject {
             for attempt in 1 ... 4 {
                 self.releasePageInterruption()
                 self.command("play")
-                try? await Task.sleep(for: .milliseconds(900))
+                try? await Task.sleep(nanoseconds: 900000000)
                 if self.state.isPlaying {
                     self.log.log("bg", "resumed (attempt \(attempt))")
                     break
@@ -1133,7 +1132,7 @@ final class WebPlayer: NSObject {
             self.log.log("call", "call ended (resume=\(shouldResume))")
             Task {
                 // Give the system a moment to hand the audio route back before playing.
-                try? await Task.sleep(for: .milliseconds(800))
+                try? await Task.sleep(nanoseconds: 800000000)
                 _ = await Task.detached(priority: .userInitiated) { Self.activateAudioSession(configuring: false) }.value
                 self.releasePageInterruption()
                 if shouldResume { self.command("play") }

@@ -1,18 +1,16 @@
-import Observation
 import SwiftUI
 
 @MainActor
-@Observable
-final class ArtistDetailModel {
+final class ArtistDetailModel: ObservableObject {
     enum Phase: Equatable {
         case loading, loaded, failed(String)
     }
 
     let id: String
     private let client: YTMusicClient
-    private(set) var detail: ArtistDetail?
-    private(set) var phase: Phase = .loading
-    var isSubscribed = false
+    @Published private(set) var detail: ArtistDetail?
+    @Published private(set) var phase: Phase = .loading
+    @Published var isSubscribed = false
 
     init(id: String, client: YTMusicClient) {
         self.id = id
@@ -49,8 +47,12 @@ final class ArtistDetailModel {
 }
 
 struct ArtistDetailView: View {
-    @Environment(AppEnvironment.self) private var environment
-    @State private var model: ArtistDetailModel?
+    @EnvironmentObject private var environment: AppEnvironment
+    @StateObject private var modelHolder = ObservableHolder<ArtistDetailModel>()
+    private var model: ArtistDetailModel? {
+        get { self.modelHolder.inner }
+        nonmutating set { self.modelHolder.inner = newValue }
+    }
     @State private var isAboutExpanded = false
 
     let id: String
@@ -285,7 +287,7 @@ struct ArtistDetailView: View {
 
 /// Everything by an artist, behind "See all" on the top songs shelf.
 struct ArtistSongsView: View {
-    @Environment(AppEnvironment.self) private var environment
+    @EnvironmentObject private var environment: AppEnvironment
 
     let browseId: String
     let params: String?

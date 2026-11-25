@@ -5,10 +5,14 @@ import SwiftUI
 /// Full-screen player. Every control sends a command to the web player; what is drawn comes
 /// from `PlaybackState`, which only changes when the page reports back.
 struct NowPlayingView: View {
-    @Environment(AppEnvironment.self) private var environment
+    @EnvironmentObject private var environment: AppEnvironment
     @Environment(\.dismiss) private var dismiss
 
-    @State private var model: NowPlayingModel?
+    @StateObject private var modelHolder = ObservableHolder<NowPlayingModel>()
+    private var model: NowPlayingModel? {
+        get { self.modelHolder.inner }
+        nonmutating set { self.modelHolder.inner = newValue }
+    }
     @State private var isQueuePresented = false
     @State private var isLyricsPresented = false
     @State private var dragOffset: CGFloat = 0
@@ -40,9 +44,9 @@ struct NowPlayingView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                         .shadow(color: .black.opacity(0.3), radius: 22, y: 12)
                         .frame(width: width * (state.isPlaying ? 0.84 : 0.64))
-                        .animation(.spring(duration: 0.5, bounce: 0.3), value: state.isPlaying)
+                        .animation(.spring(response: 0.5, dampingFraction: 0.7), value: state.isPlaying)
                         .position(x: width / 2, y: top + height * (state.isPlaying ? 0.325 : 0.311))
-                        .animation(.spring(duration: 0.5, bounce: 0.3), value: state.isPlaying)
+                        .animation(.spring(response: 0.5, dampingFraction: 0.7), value: state.isPlaying)
 
                     self.titleRow(state)
                         .padding(.horizontal, margin)
@@ -73,7 +77,7 @@ struct NowPlayingView: View {
                         if value.translation.height > 140 || value.predictedEndTranslation.height > 400 {
                             self.dismiss()
                         } else {
-                            withAnimation(.spring(duration: 0.3)) { self.dragOffset = 0 }
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { self.dragOffset = 0 }
                         }
                     }
             )
@@ -85,7 +89,7 @@ struct NowPlayingView: View {
             self.model = model
             await model.trackChanged(to: state.videoId)
         }
-        .onChange(of: self.environment.likedFromOutside) { _, videoId in
+        .onChange(of: self.environment.likedFromOutside) { videoId in
             if let videoId { self.model?.likedElsewhere(videoId: videoId) }
         }
         .task(id: state.artworkURL) {
@@ -94,7 +98,7 @@ struct NowPlayingView: View {
             await model.artworkChanged(to: state.artworkURL)
         }
         .sheet(item: self.$artistToShow) { artist in
-            NavigationStack {
+            NavigationStackCompat {
                 ArtistDetailView(id: artist.id, fallbackName: artist.name)
                     .entityDestinations()
                     .toolbar {
@@ -153,7 +157,7 @@ struct NowPlayingView: View {
                         self.environment.player.startRadio(videoId: videoId)
                     }
                     if let url = URL(string: "https://music.youtube.com/watch?v=\(videoId)") {
-                        ShareLink(item: url) { Label("Share", systemImage: "square.and.arrow.up") }
+                        ShareButton(items: [url]) { Label("Share", systemImage: "square.and.arrow.up") }
                     }
                 }
             } label: {
@@ -210,7 +214,6 @@ struct NowPlayingView: View {
             Button { Haptics.tap(); self.environment.player.togglePlayPause() } label: {
                 Image(systemName: state.isPlaying ? "pause.fill" : "play.fill")
                     .font(.system(size: 52))
-                    .contentTransition(.symbolEffect(.replace))
                     .frame(maxWidth: .infinity)
             }
             .accessibilityLabel(state.isPlaying ? "Pause" : "Play")

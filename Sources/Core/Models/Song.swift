@@ -1,4 +1,3 @@
-import CoreTransferable
 import Foundation
 
 // MARK: - Song
@@ -278,10 +277,3 @@ extension Song {
     }
 }
 
-// MARK: Transferable
-
-extension Song: Transferable {
-    static var transferRepresentation: some TransferRepresentation {
-        CodableRepresentation(for: Song.self, contentType: .data)
-    }
-}

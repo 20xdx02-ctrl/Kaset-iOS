@@ -2,11 +2,11 @@ name: KasetiOS
 options:
   bundleIdPrefix: dev.emoona
   deploymentTarget:
-    iOS: "26.0"
+    iOS: "15.0"
   createIntermediateGroups: true
 settings:
   base:
-    SWIFT_VERSION: "6.0"
+    SWIFT_VERSION: "5.9"
     CODE_SIGN_STYLE: Automatic
 targets:
   KasetiOS:
@@ -19,6 +19,7 @@ targets:
       - path: Sources
         excludes:
           - Mac
+          - Intents
     info:
       path: Sources/Info.plist
       properties:
@@ -51,11 +52,12 @@ targets:
     type: application
     platform: macOS
     scheme: {}
-    deploymentTarget: "26.0"
+    deploymentTarget: "13.0"
     sources:
       - path: Sources
         excludes:
           - Info.plist
+          - Intents
           - Features/Shell/MainTabView.swift
           - Features/Shell/MiniPlayerView.swift
           - Features/NowPlaying/NowPlayingView.swift
@@ -87,7 +89,9 @@ targets:
     type: bundle.unit-test
     platform: iOS
     sources:
-      - Tests/KasetiOSTests
+      - path: Tests/KasetiOSTests
+        excludes:
+          - MusicIntentTests.swift
     dependencies:
       - target: KasetiOS
     settings:

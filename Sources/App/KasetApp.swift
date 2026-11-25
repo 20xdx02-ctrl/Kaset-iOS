@@ -1,3 +1,6 @@
+#if os(iOS)
+import BackgroundTasks
+#endif
 import SwiftUI
 import UserNotifications
 
@@ -15,17 +18,14 @@ struct KasetApp: App {
         #if os(iOS)
         WindowGroup {
             RootView()
-                .environment(environment)
+                .environmentObject(environment)
                 .tint(Color.brand)
-        }
-        .backgroundTask(.appRefresh(NewReleaseWatcher.taskIdentifier)) {
-            await environment.newReleases.runBackgroundCheck(client: environment.client, auth: environment.auth)
         }
         #else
         // One main window, like Kaset for macOS: closing it keeps the app (and the music) running.
         Window("Kaset", id: "main") {
             RootView()
-                .environment(environment)
+                .environmentObject(environment)
                 .tint(Color.brand)
         }
         .defaultSize(width: 1180, height: 760)
@@ -34,7 +34,7 @@ struct KasetApp: App {
 
         Settings {
             SettingsView()
-                .environment(environment)
+                .environmentObject(environment)
                 .tint(Color.brand)
                 .frame(width: 520, height: 620)
         }
@@ -51,6 +51,26 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
         UNUserNotificationCenter.current().delegate = self
+        // `Scene.backgroundTask` needs iOS 16; register the same identifier with
+        // BGTaskScheduler so background refresh keeps working on iOS 15.
+        BGTaskScheduler.shared.register(
+            forTaskWithIdentifier: NewReleaseWatcher.taskIdentifier,
+            using: nil
+        ) { task in
+            guard let refresh = task as? BGAppRefreshTask else {
+                task.setTaskCompleted(success: false)
+                return
+            }
+            let work = Task { @MainActor in
+                let environment = AppEnvironment.shared
+                await environment.newReleases.runBackgroundCheck(
+                    client: environment.client,
+                    auth: environment.auth
+                )
+                refresh.setTaskCompleted(success: true)
+            }
+            refresh.expirationHandler = { work.cancel() }
+        }
         return true
     }
 

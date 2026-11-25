@@ -1,4 +1,3 @@
-import Observation
 import SwiftUI
 
 /// What is being added: one song, or the songs of a playlist/album cover.
@@ -15,8 +14,7 @@ enum AddToPlaylistSource: Equatable {
 }
 
 @MainActor
-@Observable
-final class AddToPlaylistModel {
+final class AddToPlaylistModel: ObservableObject {
     enum Phase: Equatable {
         case loading, loaded, failed(String)
     }
@@ -24,14 +22,14 @@ final class AddToPlaylistModel {
     let source: AddToPlaylistSource
     private let client: YTMusicClient
 
-    private(set) var menu: AddToPlaylistMenu?
-    private(set) var options: [AddToPlaylistOption] = []
-    private(set) var phase: Phase = .loading
+    @Published private(set) var menu: AddToPlaylistMenu?
+    @Published private(set) var options: [AddToPlaylistOption] = []
+    @Published private(set) var phase: Phase = .loading
     /// Playlists that now contain the song(s) (already did, or added in this sheet).
-    private(set) var added: Set<String> = []
-    private(set) var busyId: String?
+    @Published private(set) var added: Set<String> = []
+    @Published private(set) var busyId: String?
     private var videoIds: [String] = []
-    var message: String?
+    @Published var message: String?
 
     init(source: AddToPlaylistSource, client: YTMusicClient) {
         self.source = source
@@ -98,7 +96,7 @@ final class AddToPlaylistModel {
             self.added.insert(id)
             self.message = "Created \(title)"
             Task { [weak self] in
-                try? await Task.sleep(for: .seconds(1.5))
+                try? await Task.sleep(nanoseconds: 1500000000)
                 await self?.reloadKeepingLocal(newId: id)
             }
             return true
@@ -131,18 +129,22 @@ final class AddToPlaylistModel {
 /// "Add to playlist": the user's playlists with a checkmark where the song already is, and a
 /// way to create a new playlist that starts with this song.
 struct AddToPlaylistSheet: View {
-    @Environment(AppEnvironment.self) private var environment
+    @EnvironmentObject private var environment: AppEnvironment
     @Environment(\.dismiss) private var dismiss
 
     let source: AddToPlaylistSource
 
-    @State private var model: AddToPlaylistModel?
+    @StateObject private var modelHolder = ObservableHolder<AddToPlaylistModel>()
+    private var model: AddToPlaylistModel? {
+        get { self.modelHolder.inner }
+        nonmutating set { self.modelHolder.inner = newValue }
+    }
     @State private var isCreating = false
     @State private var newTitle = ""
     @State private var newPrivacy: PlaylistPrivacyStatus = .private
 
     var body: some View {
-        NavigationStack {
+        NavigationStackCompat {
             Group {
                 if let model {
                     self.content(model)
@@ -161,10 +163,10 @@ struct AddToPlaylistSheet: View {
                         .font(.footnote.weight(.semibold))
                         .padding(.horizontal, 14)
                         .padding(.vertical, 10)
-                        .glassEffect(.regular, in: .capsule)
+                        .background(.ultraThinMaterial, in: Capsule())
                         .padding(.bottom, 16)
                         .task {
-                            try? await Task.sleep(for: .seconds(2.5))
+                            try? await Task.sleep(nanoseconds: 2500000000)
                             self.model?.message = nil
                         }
                 }

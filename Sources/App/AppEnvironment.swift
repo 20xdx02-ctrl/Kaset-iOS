@@ -1,11 +1,10 @@
 import Foundation
-import Observation
+import Combine
 import WebKit
 
 /// Owns the long-lived services.
 @MainActor
-@Observable
-final class AppEnvironment {
+final class AppEnvironment: ObservableObject {
     /// The one instance: the app's scene and the intents, which the system can run before any
     /// window exists, have to share the same player.
     static let shared = AppEnvironment()
@@ -18,32 +17,33 @@ final class AppEnvironment {
     let newReleases = NewReleaseWatcher()
     let listening = ListeningHistory()
     private let accountSwitcher = AccountSwitcher()
-    @ObservationIgnored private var restoreTask: Task<Void, Never>?
+    private var restoreTask: Task<Void, Never>?
+    private var childCancellables: [AnyCancellable] = []
 
     /// Photo of the selected account, for the navigation bar button.
-    private(set) var accountAvatarURL: URL?
+    @Published private(set) var accountAvatarURL: URL?
     /// Name of the selected account (macOS sidebar footer).
-    private(set) var accountName: String?
+    @Published private(set) var accountName: String?
 
     /// Full-screen Now Playing. Lives here so any screen can open it (e.g. cover quick-play).
-    var isNowPlayingPresented = false
+    @Published var isNowPlayingPresented = false
 
     /// Bumped after the user's library changes (playlist created, renamed, deleted) so the
     /// Library screen reloads.
-    var libraryRevision = 0
+    @Published var libraryRevision = 0
 
     /// Last song liked by an intent, so an open Now Playing shows the heart.
-    var likedFromOutside: String?
+    @Published var likedFromOutside: String?
 
     /// Bumped after every switch of Google account or channel, so screens showing personal
     /// content (and the account pickers) reload.
-    private(set) var accountRevision = 0
+    @Published private(set) var accountRevision = 0
 
-    var isPlaybackDebugPresented = false
+    @Published var isPlaybackDebugPresented = false
 
     /// Presents the sign-in sheet. Each presentation signs in to a fresh data store, so it
     /// adds an account; a cancelled sign-in throws that store away.
-    var isLoginPresented = false {
+    @Published var isLoginPresented = false {
         didSet {
             guard self.isLoginPresented != oldValue else { return }
             if self.isLoginPresented {
@@ -64,9 +64,9 @@ final class AppEnvironment {
     }
 
     /// Set while the sign-in sheet renews the session of an existing account (in its own store).
-    @ObservationIgnored private var reauthAccountID: UUID?
+    private var reauthAccountID: UUID?
 
-    @ObservationIgnored private var addsNewAccount = false
+    private var addsNewAccount = false
 
     /// The active account's session expired: sign in again into that account's store.
     func signInAgain() {
@@ -81,7 +81,7 @@ final class AppEnvironment {
     }
 
     /// The data store of the sign-in in progress.
-    @ObservationIgnored private(set) var loginAccountID: UUID?
+    private(set) var loginAccountID: UUID?
     var loginDataStore: WKWebsiteDataStore {
         let id = self.loginAccountID ?? UUID()
         self.loginAccountID = id
@@ -98,6 +98,20 @@ final class AppEnvironment {
         self.client.brandIdProvider = { accounts.active?.brandId }
         let listening = self.listening
         self.player.onStateChange = { state, date in listening.playbackChanged(state, at: date) }
+
+        // With Observation (iOS 17) a view reading `environment.player.state` was invalidated by
+        // the nested object automatically. ObservableObject does not do that, so forward every
+        // service's changes through this environment: any view observing it redraws.
+        let forward: (ObservableObjectPublisher) -> Void = { publisher in
+            publisher.sink { [weak self] _ in self?.objectWillChange.send() }
+                .store(in: &self.childCancellables)
+        }
+        forward(accounts.objectWillChange)
+        forward(auth.objectWillChange)
+        forward(player.objectWillChange)
+        forward(mixes.objectWillChange)
+        forward(newReleases.objectWillChange)
+        forward(listening.objectWillChange)
     }
 
     /// Plays an entity without opening its page. Playlists use their id as the queue; an album's

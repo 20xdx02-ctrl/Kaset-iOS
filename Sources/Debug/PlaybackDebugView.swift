@@ -24,7 +24,7 @@ struct PlaybackDebugView: View {
     ]
 
     var body: some View {
-        NavigationStack {
+        NavigationStackCompat {
             List {
                 Section("État") {
                     let s = self.player.state
@@ -101,7 +101,7 @@ struct PlaybackDebugView: View {
                 }
 
                 Section {
-                    ShareLink(item: self.log.fileURL) { Label("Partager le log", systemImage: "square.and.arrow.up") }
+                    ShareButton(items: [self.log.fileURL]) { Label("Partager le log", systemImage: "square.and.arrow.up") }
                     Button("Vider le log", role: .destructive) { self.log.clear() }
                     ForEach(Array(self.log.lines.suffix(60).enumerated()), id: \.offset) { _, line in
                         Text(line).font(.system(size: 10, design: .monospaced))

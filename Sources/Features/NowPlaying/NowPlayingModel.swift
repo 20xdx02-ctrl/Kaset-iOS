@@ -1,21 +1,19 @@
 import ImageIO
-import Observation
 import SwiftUI
 
 /// Rating and lyrics for the track the page is playing. The track itself comes from
 /// `PlaybackState`; this only adds what the web player does not report.
 @MainActor
-@Observable
-final class NowPlayingModel {
-    private(set) var likeStatus: LikeStatus = .indifferent
+final class NowPlayingModel: ObservableObject {
+    @Published private(set) var likeStatus: LikeStatus = .indifferent
     /// Artists of the current track, with ids, from the song metadata.
-    private(set) var artists: [Artist] = []
+    @Published private(set) var artists: [Artist] = []
     /// Lyrics of `lyricsVideoId`; `nil` until loaded.
-    private(set) var lyrics: LyricResult?
-    private(set) var lyricsVideoId: String?
-    private(set) var isLoadingLyrics = false
+    @Published private(set) var lyrics: LyricResult?
+    @Published private(set) var lyricsVideoId: String?
+    @Published private(set) var isLoadingLyrics = false
     /// Average colour of the current artwork; drives the background gradient.
-    private(set) var artworkColor: PlatformColor?
+    @Published private(set) var artworkColor: PlatformColor?
     private var loadedVideoId: String?
     private var loadedArtworkURL: URL?
     private let client: YTMusicClient
@@ -157,7 +155,7 @@ struct ScrubberView: View {
                         }
                         .frame(height: self.dragFraction == nil ? 6 : 10)
                         .clipShape(Capsule())
-                        .animation(.spring(duration: 0.25), value: self.dragFraction == nil)
+                        .animation(.spring(response: 0.25, dampingFraction: 0.85), value: self.dragFraction == nil)
                         .frame(maxHeight: .infinity)
                         .contentShape(Rectangle())
                         .gesture(
@@ -224,6 +222,6 @@ struct PressableButtonStyle: ButtonStyle {
         configuration.label
             .scaleEffect(configuration.isPressed ? 0.88 : 1)
             .opacity(configuration.isPressed ? 0.7 : 1)
-            .animation(.spring(duration: 0.2), value: configuration.isPressed)
+            .animation(.spring(response: 0.2, dampingFraction: 0.85), value: configuration.isPressed)
     }
 }

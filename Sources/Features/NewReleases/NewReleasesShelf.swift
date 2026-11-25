@@ -3,7 +3,7 @@ import SwiftUI
 /// "New from your artists" on Home: releases of the last 60 days, most recent first.
 /// Hidden while there is nothing to show.
 struct NewReleasesShelf: View {
-    @Environment(AppEnvironment.self) private var environment
+    @EnvironmentObject private var environment: AppEnvironment
 
     var body: some View {
         let releases = self.environment.newReleases.shelf

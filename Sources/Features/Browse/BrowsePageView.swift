@@ -1,18 +1,16 @@
-import Observation
 import SwiftUI
 
 /// One paginated browse surface (Home, Explore, Charts, Moods, New releases, History).
 @MainActor
-@Observable
-final class BrowsePageModel {
+final class BrowsePageModel: ObservableObject {
     enum Phase: Equatable {
         case idle, loading, loaded, failed(String)
     }
 
     let type: PaginatedContentType
-    private(set) var sections: [HomeSection] = []
-    private(set) var phase: Phase = .idle
-    private(set) var isLoadingMore = false
+    @Published private(set) var sections: [HomeSection] = []
+    @Published private(set) var phase: Phase = .idle
+    @Published private(set) var isLoadingMore = false
 
     private let client: YTMusicClient
 
@@ -162,7 +160,7 @@ struct ShelfView: View {
                         .accessibilityAddTraits(.isHeader)
                     Spacer(minLength: 8)
                     if let seeAll {
-                        NavigationLink("See all", value: seeAll)
+                        NavigationLink("See all") { SeeAllView(destination: seeAll) }
                             .font(.subheadline)
                     }
                     if Platform.isMac, !self.isMoodGrid, self.canPage {
@@ -187,16 +185,16 @@ struct ShelfView: View {
                                 .minimumScaleFactor(0.85)
                                 .frame(maxWidth: .infinity, minHeight: Platform.isMac ? 60 : 52)
                                 .padding(.horizontal, 8)
-                                .glassEffect(.regular, in: .rect(cornerRadius: 14))
+                                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                         }
                     }
                 }
                 .padding(.horizontal, AdaptiveLayout.horizontalPadding)
-                .onGeometryChange(for: CGFloat.self) { $0.size.width - 2 * AdaptiveLayout.horizontalPadding } action: { self.gridWidth = $0 }
+                .onGeometryChangeCompat(of: { $0.size.width - 2 * AdaptiveLayout.horizontalPadding }) { self.gridWidth = $0 }
 
                 if canCollapse {
                     Button {
-                        withAnimation(.snappy) { self.isExpanded.toggle() }
+                        withAnimation(.easeInOut(duration: 0.2)) { self.isExpanded.toggle() }
                     } label: {
                         Label(
                             self.isExpanded ? "Show less" : "Show all (\(self.entities.count))",
@@ -216,12 +214,10 @@ struct ShelfView: View {
                             MediaActions(entity: entity) { MediaCard(entity: entity) }
                         }
                     }
-                    .scrollTargetLayout()
                     .padding(.horizontal, AdaptiveLayout.horizontalPadding)
                     .padding(.vertical, 4)
                 }
-                .scrollPosition(id: self.$scrolledID, anchor: .leading)
-                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { self.rowWidth = $0 }
+                .onGeometryChangeCompat(of: { $0.size.width }) { self.rowWidth = $0 }
             }
         }
     }
@@ -287,7 +283,7 @@ extension ShelfView {
 /// Everything behind a shelf's "See all": the playlist page, or the sections of the browse
 /// page as grids.
 struct SeeAllView: View {
-    @Environment(AppEnvironment.self) private var environment
+    @EnvironmentObject private var environment: AppEnvironment
 
     let destination: SeeAllDestination
 

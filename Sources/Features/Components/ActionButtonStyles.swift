@@ -13,7 +13,7 @@ struct PrimaryActionButtonStyle: ButtonStyle {
             .frame(maxWidth: .infinity, minHeight: AdaptiveLayout.actionHeight)
             .background(Color.brand.opacity(configuration.isPressed ? 0.8 : 1), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             .scaleEffect(configuration.isPressed ? 0.98 : 1)
-            .animation(.spring(duration: 0.2), value: configuration.isPressed)
+            .animation(.spring(response: 0.2, dampingFraction: 0.85), value: configuration.isPressed)
     }
 }
 
@@ -25,6 +25,6 @@ struct SecondaryActionButtonStyle: ButtonStyle {
             .frame(maxWidth: .infinity, minHeight: AdaptiveLayout.actionHeight)
             .background(Color(.tertiarySystemFill).opacity(configuration.isPressed ? 0.7 : 1), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             .scaleEffect(configuration.isPressed ? 0.98 : 1)
-            .animation(.spring(duration: 0.2), value: configuration.isPressed)
+            .animation(.spring(response: 0.2, dampingFraction: 0.85), value: configuration.isPressed)
     }
 }

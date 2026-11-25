@@ -72,7 +72,7 @@ extension View {
     /// iOS sheets get half / full detents; macOS sheets get a usable fixed size instead.
     func adaptiveSheetSize(width: CGFloat = 480, height: CGFloat = 560) -> some View {
         #if os(iOS)
-        self.presentationDetents([.medium, .large])
+        self.kasetSheetDetents()
         #else
         self.frame(minWidth: width, idealWidth: width, minHeight: height, idealHeight: height)
         #endif

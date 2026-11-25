@@ -1,43 +1,38 @@
 import SwiftUI
 
-/// Apple Music-style shell: Home · Discover · Collections · Search, with the mini player as the
-/// tab bar's bottom accessory (full pill, or compact inline when the bar minimizes).
+/// Apple Music-style shell: Home · Discover · Collections · Search, with the mini player as a
+/// bottom inset above the tab bar.
 struct MainTabView: View {
     enum Tab: Hashable {
         case home, discover, collections, search
     }
 
-    @Environment(AppEnvironment.self) private var environment
-    @Namespace private var nowPlayingNamespace
+    @EnvironmentObject private var environment: AppEnvironment
+    @ObservedObject private var router = NotificationRouter.shared
     @State private var selection: Tab = .home
 
     var body: some View {
         TabView(selection: self.$selection) {
-            SwiftUI.Tab("Home", systemImage: "house", value: Tab.home) {
-                HomeView()
-            }
-            SwiftUI.Tab("Discover", systemImage: "sparkles", value: Tab.discover) {
-                DiscoverView()
-            }
-            SwiftUI.Tab("Collections", systemImage: "square.stack", value: Tab.collections) {
-                CollectionsView()
-            }
-            SwiftUI.Tab("Search", systemImage: "magnifyingglass", value: Tab.search, role: .search) {
-                SearchView()
-            }
+            HomeView()
+                .tabItem { Label("Home", systemImage: "house") }
+                .tag(Tab.home)
+            DiscoverView()
+                .tabItem { Label("Discover", systemImage: "sparkles") }
+                .tag(Tab.discover)
+            CollectionsView()
+                .tabItem { Label("Collections", systemImage: "square.stack") }
+                .tag(Tab.collections)
+            SearchView()
+                .tabItem { Label("Search", systemImage: "magnifyingglass") }
+                .tag(Tab.search)
         }
         .queueNoticeBanner()
-        .onChange(of: NotificationRouter.shared.homeRequest) { self.selection = .home }
-        .tabBarMinimizeBehavior(.onScrollDown)
-        .tabViewBottomAccessory {
-            MiniPlayerView(
-                namespace: self.nowPlayingNamespace,
-                onTap: { self.environment.isNowPlayingPresented = true }
-            )
+        .onChange(of: self.router.homeRequest) { _ in self.selection = .home }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            MiniPlayerView(onTap: { self.environment.isNowPlayingPresented = true })
         }
-        .fullScreenCover(isPresented: Bindable(self.environment).isNowPlayingPresented) {
+        .fullScreenCover(isPresented: self.$environment.isNowPlayingPresented) {
             NowPlayingView()
-                .navigationTransition(.zoom(sourceID: "miniPlayer", in: self.nowPlayingNamespace))
         }
     }
 }

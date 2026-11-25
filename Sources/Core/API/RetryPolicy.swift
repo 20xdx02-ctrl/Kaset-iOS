@@ -36,7 +36,7 @@ struct RetryPolicy {
                 // Don't retry on last attempt
                 if attempt < self.maxAttempts - 1 {
                     let delayTime = self.delay(for: attempt)
-                    try await Task.sleep(for: .seconds(delayTime))
+                    try await Task.sleep(nanoseconds: UInt64((delayTime) * 1_000_000_000))
                 }
             }
         }

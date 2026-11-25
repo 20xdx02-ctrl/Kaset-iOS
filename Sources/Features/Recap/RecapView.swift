@@ -1,12 +1,10 @@
-import Charts
-import CoreTransferable
 import SwiftUI
 import UniformTypeIdentifiers
 
 /// Listening recap for a week, month or year: time listened, top artists and songs, hours of
 /// the day and new artists, from the plays recorded on the device.
 struct RecapView: View {
-    @Environment(AppEnvironment.self) private var environment
+    @EnvironmentObject private var environment: AppEnvironment
     @State private var period: RecapPeriod = .month
     /// 0 = the current period, -1 the one before, …
     @State private var offset = 0
@@ -24,7 +22,7 @@ struct RecapView: View {
                     ForEach(RecapPeriod.allCases) { Text($0.title).tag($0) }
                 }
                 .pickerStyle(.segmented)
-                .onChange(of: self.period) { _, _ in self.offset = 0 }
+                .onChange(of: self.period) { _ in self.offset = 0 }
 
                 self.periodHeader(recap, canGoBack: plays.first.map { $0.startedAt < recap.interval.start } ?? false)
 
@@ -65,10 +63,7 @@ struct RecapView: View {
             Text(recap.interval.title()).font(.headline)
             Spacer()
             if recap.plays > 0 {
-                ShareLink(
-                    item: RecapCardImage(recap: recap),
-                    preview: SharePreview(Text("My listening recap"), image: Image(systemName: "chart.bar"))
-                ) {
+                ShareButton(items: [self.shareText(recap)]) {
                     Image(systemName: "square.and.arrow.up")
                 }
             }
@@ -77,6 +72,11 @@ struct RecapView: View {
                 .disabled(self.offset >= 0)
         }
         .font(.title3)
+    }
+
+    private func shareText(_ recap: Recap) -> String {
+        let artists = recap.topArtists.prefix(5).map(\.name).joined(separator: ", ")
+        return "My listening recap · \(recap.interval.title()): \(recap.minutes) min, \(recap.plays) plays, \(recap.artistCount) artists. Top artists: \(artists)"
     }
 
     private func summary(_ recap: Recap) -> some View {
@@ -152,18 +152,29 @@ struct RecapView: View {
             if let peak = recap.peakHour {
                 Text("Mostly around \(Self.hourLabel(peak))").foregroundStyle(.secondary)
             }
-            Chart(Array(recap.minutesByHour.enumerated()), id: \.offset) { hour, minutes in
-                BarMark(x: .value("Hour", hour), y: .value("Minutes", minutes))
-                    .foregroundStyle(Color.brand.gradient)
-            }
-            .chartXScale(domain: 0 ... 23)
-            .chartXAxis {
-                AxisMarks(values: [0, 6, 12, 18]) { value in
-                    AxisGridLine()
-                    AxisValueLabel { Text(Self.hourLabel(value.as(Int.self) ?? 0)) }
+            // Swift Charts needs iOS 16, so the bars are drawn by hand.
+            let peak = max(recap.minutesByHour.max() ?? 0, 1)
+            HStack(alignment: .bottom, spacing: 2) {
+                ForEach(Array(recap.minutesByHour.enumerated()), id: \.offset) { hour, minutes in
+                    RoundedRectangle(cornerRadius: 2, style: .continuous)
+                        .fill(Color.brand.gradient)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: max(2, CGFloat(minutes) / CGFloat(peak) * 140))
+                        .accessibilityLabel("\(Self.hourLabel(hour)): \(minutes) minutes")
                 }
             }
-            .frame(height: 160)
+            .frame(height: 160, alignment: .bottom)
+            HStack {
+                Text(Self.hourLabel(0))
+                Spacer()
+                Text(Self.hourLabel(6))
+                Spacer()
+                Text(Self.hourLabel(12))
+                Spacer()
+                Text(Self.hourLabel(18))
+            }
+            .font(.caption2)
+            .foregroundStyle(.secondary)
         }
     }
 
@@ -188,27 +199,6 @@ struct RecapView: View {
 // MARK: - Shareable card
 
 /// The recap drawn as a picture for the share sheet (rendered only when shared).
-struct RecapCardImage: Transferable {
-    let recap: Recap
-
-    static var transferRepresentation: some TransferRepresentation {
-        DataRepresentation(exportedContentType: .png) { item in
-            try await MainActor.run {
-                let renderer = ImageRenderer(content: RecapCard(recap: item.recap))
-                renderer.scale = 3
-                #if os(iOS)
-                guard let data = renderer.uiImage?.pngData() else { throw CocoaError(.fileWriteUnknown) }
-                #else
-                guard let image = renderer.cgImage,
-                      let data = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])
-                else { throw CocoaError(.fileWriteUnknown) }
-                #endif
-                return data
-            }
-        }
-    }
-}
-
 /// Text only: artwork is loaded asynchronously and would not be in the rendered picture.
 struct RecapCard: View {
     let recap: Recap

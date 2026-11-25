@@ -1,5 +1,5 @@
 import Foundation
-import Observation
+import Combine
 import WebKit
 
 enum AuthState: Equatable {
@@ -16,14 +16,13 @@ enum AuthState: Equatable {
 /// OS-evicted web data store) does not sign the user out, and the same jar feeds `SAPISIDHASH`
 /// signing. Switching accounts points this store at another data store and vault (`activate`).
 @MainActor
-@Observable
-final class AuthStore {
-    private(set) var state: AuthState = .unknown
+final class AuthStore: ObservableObject {
+    @Published private(set) var state: AuthState = .unknown
 
-    @ObservationIgnored private var vault: CookieVault
-    @ObservationIgnored private var dataStore: WKWebsiteDataStore
-    @ObservationIgnored private var observer: CookieObserver?
-    @ObservationIgnored private var persistTask: Task<Void, Never>?
+    private var vault: CookieVault
+    private var dataStore: WKWebsiteDataStore
+    private var observer: CookieObserver?
+    private var persistTask: Task<Void, Never>?
 
     init(vault: CookieVault = KeychainCookieVault(), dataStore: WKWebsiteDataStore = .default()) {
         self.vault = vault
@@ -119,7 +118,7 @@ final class AuthStore {
         guard self.state == .signedIn else { return }
         self.persistTask?.cancel()
         self.persistTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(5))
+            try? await Task.sleep(nanoseconds: 5000000000)
             guard let self, !Task.isCancelled, self.state == .signedIn else { return }
             let jar = await self.cookieStore.allCookies()
             guard !Task.isCancelled, self.state == .signedIn else { return }

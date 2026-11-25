@@ -1,4 +1,3 @@
-import Observation
 import SwiftUI
 
 /// Library · Liked music · History. Signed-out users get a prompt instead of empty lists.
@@ -12,14 +11,18 @@ struct CollectionsView: View {
         var id: String { self.rawValue }
     }
 
-    @Environment(AppEnvironment.self) private var environment
+    @EnvironmentObject private var environment: AppEnvironment
     @State private var selection: Segment = .library
-    @State private var history: BrowsePageModel?
+    @StateObject private var historyHolder = ObservableHolder<BrowsePageModel>()
+    private var history: BrowsePageModel? {
+        get { self.historyHolder.inner }
+        nonmutating set { self.historyHolder.inner = newValue }
+    }
     @State private var isCreatingPlaylist = false
     @State private var newPlaylistTitle = ""
 
     var body: some View {
-        NavigationStack {
+        NavigationStackCompat {
             Group {
                 if self.environment.auth.state == .signedIn {
                     VStack(spacing: 0) {
@@ -90,7 +93,7 @@ struct CollectionsView: View {
 /// Recently played, one section per period as YouTube Music groups them (Today, Yesterday,
 /// This week, …). Songs play with their radio, like everywhere else outside a playlist.
 struct HistoryView: View {
-    @Environment(AppEnvironment.self) private var environment
+    @EnvironmentObject private var environment: AppEnvironment
 
     let model: BrowsePageModel
 
@@ -138,14 +141,13 @@ struct HistoryView: View {
 // MARK: - Library
 
 @MainActor
-@Observable
-final class LibraryModel {
+final class LibraryModel: ObservableObject {
     enum Phase: Equatable {
         case loading, loaded, failed(String)
     }
 
-    private(set) var content: PlaylistParser.LibraryContent?
-    private(set) var phase: Phase = .loading
+    @Published private(set) var content: PlaylistParser.LibraryContent?
+    @Published private(set) var phase: Phase = .loading
     private let client: YTMusicClient
 
     init(client: YTMusicClient) {
@@ -165,8 +167,12 @@ final class LibraryModel {
 }
 
 struct LibraryContentView: View {
-    @Environment(AppEnvironment.self) private var environment
-    @State private var model: LibraryModel?
+    @EnvironmentObject private var environment: AppEnvironment
+    @StateObject private var modelHolder = ObservableHolder<LibraryModel>()
+    private var model: LibraryModel? {
+        get { self.modelHolder.inner }
+        nonmutating set { self.modelHolder.inner = newValue }
+    }
 
     var body: some View {
         Group {
@@ -233,14 +239,13 @@ struct LibraryContentView: View {
 // MARK: - Liked music
 
 @MainActor
-@Observable
-final class LikedMusicModel {
+final class LikedMusicModel: ObservableObject {
     enum Phase: Equatable {
         case loading, loaded, failed(String)
     }
 
-    private(set) var songs: [Song] = []
-    private(set) var phase: Phase = .loading
+    @Published private(set) var songs: [Song] = []
+    @Published private(set) var phase: Phase = .loading
     private var token: String?
     private var isLoadingMore = false
     private let client: YTMusicClient
@@ -276,8 +281,12 @@ final class LikedMusicModel {
 }
 
 struct LikedMusicView: View {
-    @Environment(AppEnvironment.self) private var environment
-    @State private var model: LikedMusicModel?
+    @EnvironmentObject private var environment: AppEnvironment
+    @StateObject private var modelHolder = ObservableHolder<LikedMusicModel>()
+    private var model: LikedMusicModel? {
+        get { self.modelHolder.inner }
+        nonmutating set { self.modelHolder.inner = newValue }
+    }
 
     var body: some View {
         Group {

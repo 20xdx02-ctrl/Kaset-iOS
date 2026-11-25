@@ -4,12 +4,10 @@ import SwiftUI
 /// view stays attached to the window as a hidden 1×1 view for the whole app lifetime so audio
 /// keeps running.
 struct RootView: View {
-    @Environment(AppEnvironment.self) private var environment
+    @EnvironmentObject private var environment: AppEnvironment
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
-        @Bindable var environment = self.environment
-
         Group {
             switch environment.auth.state {
             case .unknown:
@@ -38,12 +36,10 @@ struct RootView: View {
         .task { await environment.start() }
         .task(id: environment.auth.state) {
             guard environment.auth.state == .signedIn else { return }
-            KasetShortcuts.updateAppShortcutParameters()
             await environment.newReleases.requestNotificationPermissionIfNeeded()
             await environment.newReleases.checkIfDue(client: environment.client, auth: environment.auth)
         }
-        .onChange(of: environment.libraryRevision) { KasetShortcuts.updateAppShortcutParameters() }
-        .onChange(of: self.scenePhase) { _, phase in
+        .onChange(of: self.scenePhase) { phase in
             switch phase {
             case .active:
                 Task { await environment.listening.sync() }

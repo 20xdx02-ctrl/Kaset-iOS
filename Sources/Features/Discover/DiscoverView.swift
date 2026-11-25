@@ -21,13 +21,17 @@ struct DiscoverView: View {
         }
     }
 
-    @Environment(AppEnvironment.self) private var environment
+    @EnvironmentObject private var environment: AppEnvironment
     @State private var selection: Segment = .explore
-    @State private var models: [Segment: BrowsePageModel] = [:]
+    @StateObject private var modelsStore = ObservableModels<Segment, BrowsePageModel>()
+    private var models: [Segment: BrowsePageModel] {
+        get { self.modelsStore.values }
+        nonmutating set { self.modelsStore.values = newValue }
+    }
     @State private var visited: Set<Segment> = [.explore]
 
     var body: some View {
-        NavigationStack {
+        NavigationStackCompat {
             VStack(spacing: 0) {
                 Picker("Section", selection: self.$selection) {
                     ForEach(Segment.allCases) { Text($0.rawValue).tag($0) }

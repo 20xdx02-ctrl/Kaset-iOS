@@ -6,7 +6,7 @@ struct MacMainWindow: View {
     static let minimumWidth: CGFloat = 980
     static let minimumHeight: CGFloat = 600
 
-    @Environment(AppEnvironment.self) private var environment
+    @EnvironmentObject private var environment: AppEnvironment
     @State private var shell: MacShell?
 
     var body: some View {
@@ -33,7 +33,7 @@ private struct MacMainContent: View {
     /// Player bar height (52) + its bottom padding (8) + a little air.
     private static let playerBarClearance: CGFloat = 72
 
-    @Environment(AppEnvironment.self) private var environment
+    @EnvironmentObject private var environment: AppEnvironment
     @Environment(MacShell.self) private var shell
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     /// Detail column frame in the window, where the player bar is laid out.
@@ -115,7 +115,7 @@ private struct MacMainContent: View {
 
 /// Content for one sidebar item, in its own navigation stack.
 private struct MacDetailView: View {
-    @Environment(AppEnvironment.self) private var environment
+    @EnvironmentObject private var environment: AppEnvironment
     @Environment(MacShell.self) private var shell
 
     let item: MacSidebarItem

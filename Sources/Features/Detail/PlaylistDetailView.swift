@@ -1,9 +1,7 @@
-import Observation
 import SwiftUI
 
 @MainActor
-@Observable
-final class PlaylistDetailModel {
+final class PlaylistDetailModel: ObservableObject {
     enum Phase: Equatable {
         case loading, loaded, failed(String)
     }
@@ -11,13 +9,13 @@ final class PlaylistDetailModel {
     let id: String
     private let client: YTMusicClient
 
-    private(set) var detail: PlaylistDetail?
+    @Published private(set) var detail: PlaylistDetail?
     /// Shown after a successful rename, until the page is loaded again.
-    private(set) var renamedTitle: String?
-    private(set) var tracks: [Song] = []
-    private(set) var phase: Phase = .loading
+    @Published private(set) var renamedTitle: String?
+    @Published private(set) var tracks: [Song] = []
+    @Published private(set) var phase: Phase = .loading
     private var continuationToken: String?
-    private(set) var isLoadingMore = false
+    @Published private(set) var isLoadingMore = false
 
     init(id: String, client: YTMusicClient) {
         self.id = id
@@ -96,8 +94,12 @@ final class PlaylistDetailModel {
 
 /// Playlist or album: header, play / shuffle, tracks. Every action is a web player command.
 struct PlaylistDetailView: View {
-    @Environment(AppEnvironment.self) private var environment
-    @State private var model: PlaylistDetailModel?
+    @EnvironmentObject private var environment: AppEnvironment
+    @StateObject private var modelHolder = ObservableHolder<PlaylistDetailModel>()
+    private var model: PlaylistDetailModel? {
+        get { self.modelHolder.inner }
+        nonmutating set { self.modelHolder.inner = newValue }
+    }
     @State private var isRenaming = false
     @State private var renameText = ""
     @State private var isConfirmingDelete = false
@@ -208,7 +210,7 @@ struct PlaylistDetailView: View {
                 }
             }
             .listStyle(.plain)
-            .contentMargins(.bottom, 24, for: .scrollContent)
+            .padding(.bottom, 24)
         }
     }
 
@@ -352,7 +354,7 @@ struct PlaylistDetailView: View {
                         }
                     }
                     if let url = URL(string: "https://music.youtube.com/playlist?list=\(self.model?.watchListId ?? MediaEntity.watchPlaylistId(detail.id))") {
-                        ShareLink(item: url) { Label("Share", systemImage: "square.and.arrow.up") }
+                        ShareButton(items: [url]) { Label("Share", systemImage: "square.and.arrow.up") }
                     }
                     if let mix = self.mix(detail) {
                         Divider()
@@ -423,7 +425,7 @@ struct PlaylistDetailView: View {
 
 /// A song in a list: tap plays, long press offers play next / add to queue / like.
 struct TrackRow: View {
-    @Environment(AppEnvironment.self) private var environment
+    @EnvironmentObject private var environment: AppEnvironment
 
     let song: Song
     var index: Int?

@@ -8,7 +8,7 @@ extension View {
 
 /// Square (or circular) artwork card used in shelves.
 struct MediaCard: View {
-    @Environment(AppEnvironment.self) private var environment
+    @EnvironmentObject private var environment: AppEnvironment
 
     let entity: MediaEntity
     /// `nil` fills the proposed width (grids).
@@ -111,7 +111,7 @@ struct MediaRow: View {
 /// Wraps content so a tap and the long-press menu send commands to the web player.
 /// Songs and playlists play; albums and artists open their detail screen (K8).
 struct MediaActions<Content: View>: View {
-    @Environment(AppEnvironment.self) private var environment
+    @EnvironmentObject private var environment: AppEnvironment
 
     let entity: MediaEntity
     @ViewBuilder var content: Content
@@ -135,7 +135,7 @@ struct MediaActions<Content: View>: View {
                 .contextMenu { self.menu }
         case .playlist, .album:
             // Like the macOS app: the page opens; playing is an explicit action.
-            NavigationLink(value: self.entity) { self.content }
+            NavigationLink { MediaEntityDestinationView(entity: self.entity) } label: { self.content }
                 .buttonStyle(.plain)
                 .neutralMenuTint()
                 .contextMenu {
@@ -147,7 +147,7 @@ struct MediaActions<Content: View>: View {
                     }
                 }
         case .artist, .mood:
-            NavigationLink(value: self.entity) { self.content }
+            NavigationLink { MediaEntityDestinationView(entity: self.entity) } label: { self.content }
                 .buttonStyle(.plain)
         case .unsupported:
             self.content.opacity(0.5)

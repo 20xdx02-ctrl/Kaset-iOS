@@ -1,27 +1,32 @@
 import SwiftUI
 
 extension View {
-    /// Registers the screens a `MediaEntity` or a "See all" link navigates to. Apply once per `NavigationStack`.
-    func entityDestinations() -> some View {
-        self.navigationDestination(for: MediaEntity.self) { entity in
-            switch entity.target {
-            case let .album(id), let .playlist(id):
-                PlaylistDetailView(id: id, fallbackTitle: entity.title, thumbnailURL: entity.thumbnailURL)
-            case let .artist(id):
-                ArtistDetailView(id: id, fallbackName: entity.title)
-            case let .mood(browseId, params):
-                MoodCategoryView(browseId: browseId, params: params, title: entity.title)
-            case .song, .unsupported:
-                ContentUnavailableView(entity.title, systemImage: "music.note")
-            }
+    /// Kept for source compatibility: iOS 15 has no value-based `navigationDestination`, so every
+    /// navigation link now carries its destination directly (`MediaEntityDestinationView`).
+    func entityDestinations() -> some View { self }
+}
+
+/// The screen a `MediaEntity` opens: playlist/album, artist or mood.
+struct MediaEntityDestinationView: View {
+    let entity: MediaEntity
+
+    var body: some View {
+        switch self.entity.target {
+        case let .album(id), let .playlist(id):
+            PlaylistDetailView(id: id, fallbackTitle: self.entity.title, thumbnailURL: self.entity.thumbnailURL)
+        case let .artist(id):
+            ArtistDetailView(id: id, fallbackName: self.entity.title)
+        case let .mood(browseId, params):
+            MoodCategoryView(browseId: browseId, params: params, title: self.entity.title)
+        case .song, .unsupported:
+            ContentUnavailableView(self.entity.title, systemImage: "music.note")
         }
-        .navigationDestination(for: SeeAllDestination.self) { SeeAllView(destination: $0) }
     }
 }
 
 /// Sections for one mood / genre.
 struct MoodCategoryView: View {
-    @Environment(AppEnvironment.self) private var environment
+    @EnvironmentObject private var environment: AppEnvironment
 
     let browseId: String
     let params: String?

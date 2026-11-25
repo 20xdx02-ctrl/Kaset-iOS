@@ -1,4 +1,3 @@
-import Observation
 import SwiftUI
 
 /// Sidebar destinations, in the order of Kaset for macOS.
@@ -83,9 +82,9 @@ final class MacShell {
     var searchFocusRequest = 0
 
     let nowPlaying: NowPlayingModel
-    @ObservationIgnored private(set) lazy var search = SearchViewModel(client: self.client)
-    @ObservationIgnored private var browseModels: [PaginatedContentType: BrowsePageModel] = [:]
-    @ObservationIgnored private let client: YTMusicClient
+    private(set) lazy var search = SearchViewModel(client: self.client)
+    private var browseModels: [PaginatedContentType: BrowsePageModel] = [:]
+    private let client: YTMusicClient
 
     init(client: YTMusicClient) {
         self.client = client
@@ -93,7 +92,7 @@ final class MacShell {
     }
 
     /// Account the Home page was last loaded for; Home reloads when it changes.
-    @ObservationIgnored private var homeLoadedFor: AuthState?
+    private var homeLoadedFor: AuthState?
 
     /// Home reloads when the account changes; otherwise it is loaded once.
     func loadHome(for state: AuthState) {

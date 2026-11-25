@@ -44,7 +44,7 @@ struct MacSidePanelView: View {
 // MARK: - Lyrics
 
 private struct MacLyricsPanel: View {
-    @Environment(AppEnvironment.self) private var environment
+    @EnvironmentObject private var environment: AppEnvironment
     @Environment(MacShell.self) private var shell
 
     var body: some View {
@@ -84,7 +84,7 @@ private struct MacLyricsPanel: View {
 // MARK: - Queue
 
 private struct MacQueueModeButtons: View {
-    @Environment(AppEnvironment.self) private var environment
+    @EnvironmentObject private var environment: AppEnvironment
 
     var body: some View {
         let player = self.environment.player
@@ -107,7 +107,7 @@ private struct MacQueueModeButtons: View {
 /// The page's queue. Click plays an entry; entries after the current one can be dragged to
 /// reorder or removed (both are best effort through the page's menus).
 private struct MacQueuePanel: View {
-    @Environment(AppEnvironment.self) private var environment
+    @EnvironmentObject private var environment: AppEnvironment
 
     var body: some View {
         let player = self.environment.player

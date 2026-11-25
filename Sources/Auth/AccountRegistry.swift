@@ -1,5 +1,5 @@
 import Foundation
-import Observation
+import Combine
 import WebKit
 
 /// One signed-in Google account on this device.
@@ -26,18 +26,17 @@ struct GoogleAccount: Codable, Identifiable, Equatable, Sendable {
 /// Google session. Sign-in always happens in a fresh store, so adding an account never touches
 /// the session of another.
 @MainActor
-@Observable
-final class AccountRegistry {
+final class AccountRegistry: ObservableObject {
     private static let accountsKey = "accounts.list"
     private static let activeKey = "accounts.active"
     /// Keychain item of the single-account versions, migrated on first launch.
     private static let legacyVaultAccount = "youtube-music-cookies"
 
-    private(set) var accounts: [GoogleAccount]
-    private(set) var activeID: UUID?
+    @Published private(set) var accounts: [GoogleAccount]
+    @Published private(set) var activeID: UUID?
 
-    @ObservationIgnored private let defaults: UserDefaults
-    @ObservationIgnored private let vaultFactory: (String) -> CookieVault
+    private let defaults: UserDefaults
+    private let vaultFactory: (String) -> CookieVault
 
     init(
         defaults: UserDefaults = .standard,
@@ -116,7 +115,7 @@ final class AccountRegistry {
     /// retries for a few seconds; anything left over is swept by `removeOrphanedDataStores`.
     static func removeDataStore(_ id: UUID) async {
         for attempt in 0 ..< 5 {
-            if attempt > 0 { try? await Task.sleep(for: .seconds(1)) }
+            if attempt > 0 { try? await Task.sleep(nanoseconds: 1000000000) }
             do {
                 try await WKWebsiteDataStore.remove(forIdentifier: id)
                 return

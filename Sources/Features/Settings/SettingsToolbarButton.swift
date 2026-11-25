@@ -14,7 +14,7 @@ struct SettingsToolbarButton: ToolbarContent {
 }
 
 private struct SettingsSheetButton: View {
-    @Environment(AppEnvironment.self) private var environment
+    @EnvironmentObject private var environment: AppEnvironment
     @State private var isPresented = false
 
     private var isSignedIn: Bool { self.environment.auth.state == .signedIn }

@@ -1,9 +1,7 @@
-import Observation
 import SwiftUI
 
 @MainActor
-@Observable
-final class SearchViewModel {
+final class SearchViewModel: ObservableObject {
     enum Phase: Equatable {
         case idle, loading, loaded, failed(String)
     }
@@ -15,13 +13,13 @@ final class SearchViewModel {
         var phase: Phase = .idle
     }
 
-    var query = ""
-    var scope: SearchFilter = .all
-    private(set) var suggestions: [SearchSuggestion] = []
-    private(set) var submittedQuery = ""
-    private(set) var buckets: [SearchFilter: Bucket] = [:]
-    private(set) var recents: [String]
-    private(set) var isLoadingMore = false
+    @Published var query = ""
+    @Published var scope: SearchFilter = .all
+    @Published private(set) var suggestions: [SearchSuggestion] = []
+    @Published private(set) var submittedQuery = ""
+    @Published private(set) var buckets: [SearchFilter: Bucket] = [:]
+    @Published private(set) var recents: [String]
+    @Published private(set) var isLoadingMore = false
 
     private let client: YTMusicClient
     private static let recentsKey = "search.recents"
@@ -50,7 +48,7 @@ final class SearchViewModel {
             self.suggestions = []
             return
         }
-        try? await Task.sleep(for: .milliseconds(250))
+        try? await Task.sleep(nanoseconds: 250000000)
         guard !Task.isCancelled else { return }
         let fetched = (try? await self.client.getSearchSuggestions(query: text)) ?? []
         // A search submitted while this request was in flight owns the screen now.
@@ -161,11 +159,15 @@ final class SearchViewModel {
 }
 
 struct SearchView: View {
-    @Environment(AppEnvironment.self) private var environment
-    @State private var model: SearchViewModel?
+    @EnvironmentObject private var environment: AppEnvironment
+    @StateObject private var modelHolder = ObservableHolder<SearchViewModel>()
+    private var model: SearchViewModel? {
+        get { self.modelHolder.inner }
+        nonmutating set { self.modelHolder.inner = newValue }
+    }
 
     var body: some View {
-        NavigationStack {
+        NavigationStackCompat {
             Group {
                 if let model {
                     SearchContent(model: model)
@@ -184,13 +186,10 @@ struct SearchView: View {
 }
 
 struct SearchContent: View {
-    @Environment(AppEnvironment.self) private var environment
-    @Bindable var model: SearchViewModel
-    @FocusState private var isSearchFocused: Bool
-
+    @EnvironmentObject private var environment: AppEnvironment
+    @ObservedObject var model: SearchViewModel
     /// Runs a search and puts the keyboard away so the results are visible.
     private func search(_ text: String?) {
-        self.isSearchFocused = false
         Task { await self.model.submit(text) }
     }
 
@@ -203,20 +202,8 @@ struct SearchContent: View {
             }
         }
         .searchable(text: self.$model.query, prompt: "Songs, albums, artists")
-        .searchFocused(self.$isSearchFocused)
-        .searchSuggestions {
-            // A tap searches right away (as in Apple Music). `searchCompletion` would only
-            // copy the text into the field and show the suggestions for it.
-            ForEach(self.model.suggestions) { suggestion in
-                Button {
-                    self.search(suggestion.query)
-                } label: {
-                    Label(suggestion.query, systemImage: "magnifyingglass")
-                }
-            }
-        }
         .onSubmit(of: .search) { self.search(nil) }
-        .onChange(of: self.model.query) { _, text in
+        .onChange(of: self.model.query) { text in
             if text.isEmpty { self.model.clearResults() }
         }
         .task(id: self.model.query) { await self.model.updateSuggestions() }

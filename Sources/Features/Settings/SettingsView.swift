@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Account, playback and content preferences, plus diagnostics entry points.
 struct SettingsView: View {
-    @Environment(AppEnvironment.self) private var environment
+    @EnvironmentObject private var environment: AppEnvironment
     @Environment(\.dismiss) private var dismiss
 
     @AppStorage(PlaybackAudioQuality.storageKey) private var audioQuality = PlaybackAudioQuality.auto.rawValue
@@ -21,7 +21,7 @@ struct SettingsView: View {
     @State private var isPickingSyncFolder = false
 
     var body: some View {
-        NavigationStack {
+        NavigationStackCompat {
             Form {
                 self.accountSection
 
@@ -29,7 +29,7 @@ struct SettingsView: View {
                     Picker("Audio quality", selection: self.$audioQuality) {
                         ForEach(PlaybackAudioQuality.allCases) { Text($0.displayName).tag($0.rawValue) }
                     }
-                    .onChange(of: self.audioQuality) { _, _ in self.environment.player.applyAudioQuality() }
+                    .onChange(of: self.audioQuality) { _ in self.environment.player.applyAudioQuality() }
                     #if os(iOS)
                     Toggle("Haptic feedback", isOn: self.$haptics)
                     #endif
@@ -39,20 +39,20 @@ struct SettingsView: View {
                 } footer: {
                     Text("Skipping ads is an opt-in and may go against YouTube's terms of service.")
                 }
-                .onChange(of: self.adAutoSkip) { _, _ in self.environment.player.applyAdSkipSetting() }
+                .onChange(of: self.adAutoSkip) { _ in self.environment.player.applyAdSkipSetting() }
 
                 Section {
                     Toggle("Save data on music videos", isOn: self.$dataSaver)
-                        .onChange(of: self.dataSaver) { _, _ in self.environment.player.applyDataSaverSetting() }
+                        .onChange(of: self.dataSaver) { _ in self.environment.player.applyDataSaverSetting() }
                 } footer: {
                     Text("Music videos play as their song version when YouTube Music has one (Premium), which can differ slightly from the video; other videos load at the lowest quality. The app never shows the video, so this only saves data.")
                 }
 
                 Section {
                     Toggle("Lower quality on a weak network", isOn: self.$adaptiveQuality)
-                        .onChange(of: self.adaptiveQuality) { _, _ in self.environment.player.applyAudioQuality() }
+                        .onChange(of: self.adaptiveQuality) { _ in self.environment.player.applyAudioQuality() }
                     Toggle("Longer buffer (experimental)", isOn: self.$extendedBuffer)
-                        .onChange(of: self.extendedBuffer) { _, _ in self.environment.player.applyBufferSetting() }
+                        .onChange(of: self.extendedBuffer) { _ in self.environment.player.applyBufferSetting() }
                 } header: {
                     Text("Bad network")
                 } footer: {
@@ -67,7 +67,7 @@ struct SettingsView: View {
                     Picker("Content language", selection: self.$language) {
                         ForEach(ContentLanguage.allCases) { Text($0.displayName).tag($0.rawValue) }
                     }
-                    .onChange(of: self.language) { _, _ in
+                    .onChange(of: self.language) { _ in
                         self.environment.client.resetSessionState()
                     }
                 } footer: {
@@ -113,7 +113,7 @@ struct SettingsView: View {
         let watcher = self.environment.newReleases
         return Section {
             Toggle("Notify me at 8:00", isOn: self.$newReleaseNotifications)
-                .onChange(of: self.newReleaseNotifications) { _, isOn in
+                .onChange(of: self.newReleaseNotifications) { isOn in
                     guard isOn else { return }
                     Task {
                         if await !watcher.requestNotificationPermission() { self.newReleaseNotifications = false }

@@ -3,7 +3,7 @@ import SwiftUI
 /// "My Mixes" on Home. Mixes are playlists, so their cards behave like any playlist cover:
 /// tap opens the playlist, the play badge plays it. The last card creates a mix.
 struct MixesShelf: View {
-    @Environment(AppEnvironment.self) private var environment
+    @EnvironmentObject private var environment: AppEnvironment
 
     @State private var editing: EditorTarget?
     @State private var failureMessage: String?
@@ -29,7 +29,7 @@ struct MixesShelf: View {
                     .disabled(library.isCreating)
                     ForEach(library.mixes) { mix in
                         let entity = Self.entity(for: mix)
-                        NavigationLink(value: entity) {
+                        NavigationLink { MediaEntityDestinationView(entity: entity) } label: {
                             MediaCard(entity: entity)
                                 .overlay(alignment: .top) {
                                     if library.busyPlaylistId == mix.playlistId {

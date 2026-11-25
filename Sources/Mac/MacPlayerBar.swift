@@ -10,7 +10,7 @@ struct MacPlayerBar: View {
     /// Below this width the title / artist column is dropped (Kaset's breakpoint).
     private static let compactBreakpoint: CGFloat = 760
 
-    @Environment(AppEnvironment.self) private var environment
+    @EnvironmentObject private var environment: AppEnvironment
     @Environment(MacShell.self) private var shell
 
     var body: some View {
@@ -158,7 +158,7 @@ struct MacPlayerBar: View {
 
 /// Transport row on top, elapsed / remaining at its sides and the seek lane under it.
 private struct MacProgressSection: View {
-    @Environment(AppEnvironment.self) private var environment
+    @EnvironmentObject private var environment: AppEnvironment
 
     let state: PlaybackState
 
@@ -324,7 +324,7 @@ private struct MacProgressSection: View {
 
 /// Vertical volume slider in a small popover above the volume button.
 private struct MacVolumePopover: View {
-    @Environment(AppEnvironment.self) private var environment
+    @EnvironmentObject private var environment: AppEnvironment
 
     var body: some View {
         let player = self.environment.player

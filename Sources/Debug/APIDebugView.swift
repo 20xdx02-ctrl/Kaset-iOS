@@ -13,7 +13,7 @@ struct APIDebugView: View {
     @State private var status = "…"
 
     var body: some View {
-        NavigationStack {
+        NavigationStackCompat {
             List {
                 Section("Statut") { Text(self.status).font(.footnote) }
 
@@ -90,7 +90,7 @@ struct APIDebugView: View {
 
     private func loadSuggestions() async {
         guard !self.query.isEmpty else { self.suggestions = []; return }
-        try? await Task.sleep(for: .milliseconds(250))
+        try? await Task.sleep(nanoseconds: 250000000)
         guard !Task.isCancelled else { return }
         self.suggestions = (try? await self.client.getSearchSuggestions(query: self.query)) ?? []
     }

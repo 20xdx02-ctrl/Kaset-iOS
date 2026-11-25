@@ -1,11 +1,10 @@
 import SwiftUI
 
-/// Bottom accessory. Mirrors `PlaybackState`; buttons only send commands to the page.
+/// Mini player shown above the tab bar. Mirrors `PlaybackState`; buttons only send commands to
+/// the page.
 struct MiniPlayerView: View {
-    @Environment(AppEnvironment.self) private var environment
-    @Environment(\.tabViewBottomAccessoryPlacement) private var placement
+    @EnvironmentObject private var environment: AppEnvironment
 
-    let namespace: Namespace.ID
     let onTap: () -> Void
 
     var body: some View {
@@ -21,11 +20,11 @@ struct MiniPlayerView: View {
                         Text(state.title ?? "Not playing")
                             .font(.subheadline.weight(.medium))
                             .lineLimit(1)
-                        if self.placement != .inline, state.isAd {
+                        if state.isAd {
                             Text("Advertisement")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
-                        } else if self.placement != .inline, let artist = state.artist {
+                        } else if let artist = state.artist {
                             Text(artist)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
@@ -61,6 +60,7 @@ struct MiniPlayerView: View {
             .accessibilityLabel("Next")
         }
         .padding(.horizontal, 12)
-        .matchedTransitionSource(id: "miniPlayer", in: self.namespace)
+        .padding(.vertical, 6)
+        .background(.ultraThinMaterial)
     }
 }

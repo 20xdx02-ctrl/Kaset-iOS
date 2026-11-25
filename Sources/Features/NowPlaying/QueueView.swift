@@ -6,7 +6,7 @@ import SwiftUI
 /// Rows after the current track can be dragged to reorder (the page has no reorder primitive,
 /// so the player rewrites that part of the queue) and deleted.
 struct QueueView: View {
-    @Environment(AppEnvironment.self) private var environment
+    @EnvironmentObject private var environment: AppEnvironment
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -14,7 +14,7 @@ struct QueueView: View {
         let queue = player.state.queue
         let currentIndex = queue.firstIndex(where: \.isCurrent) ?? -1
 
-        NavigationStack {
+        NavigationStackCompat {
             Group {
                 if queue.isEmpty {
                     ContentUnavailableView("Queue is empty", systemImage: "list.bullet",
@@ -47,7 +47,7 @@ struct QueueView: View {
                                 Text("Reordering…").font(.footnote).foregroundStyle(.secondary)
                             }
                             .padding(20)
-                            .glassEffect(.regular, in: .rect(cornerRadius: 16))
+                            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                         }
                     }
                 }
@@ -73,7 +73,7 @@ struct QueueView: View {
             }
         }
         .queueNoticeBanner()
-        .presentationDetents([.medium, .large])
+        .kasetSheetDetents()
     }
 
     private func row(_ entry: PlaybackState.QueueEntry, isUpNext: Bool) -> some View {

@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Lyrics of whatever the page is playing; follows track changes while open.
 struct LyricsSheet: View {
-    @Environment(AppEnvironment.self) private var environment
+    @EnvironmentObject private var environment: AppEnvironment
     @Environment(\.dismiss) private var dismiss
 
     let model: NowPlayingModel?
@@ -10,7 +10,7 @@ struct LyricsSheet: View {
     var body: some View {
         let state = self.environment.player.state
 
-        NavigationStack {
+        NavigationStackCompat {
             Group {
                 switch self.model?.lyrics(for: state.videoId) {
                 case let .synced(lyrics):
@@ -33,7 +33,7 @@ struct LyricsSheet: View {
             // track starts.
             var waits = 0
             while self.environment.player.state.duration <= 0, waits < 12 {
-                try? await Task.sleep(for: .milliseconds(250))
+                try? await Task.sleep(nanoseconds: 250000000)
                 waits += 1
             }
             guard !Task.isCancelled else { return }
@@ -65,7 +65,7 @@ struct PlainLyricsView: View {
 /// Synced lyrics: the current line is highlighted and kept in view; tapping a line seeks there.
 /// Scrolling by hand pauses the follow for a few seconds, as in Apple Music.
 struct SyncedLyricsView: View {
-    @Environment(AppEnvironment.self) private var environment
+    @EnvironmentObject private var environment: AppEnvironment
 
     let lyrics: SyncedLyrics
     var fontSize: CGFloat = 28
@@ -88,18 +88,15 @@ struct SyncedLyricsView: View {
                 .padding(.horizontal, 24)
                 .padding(.vertical, 32)
             }
-            .onScrollPhaseChange { _, phase in
-                if phase == .interacting || phase == .decelerating {
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 4).onChanged { _ in
                     self.followPausedUntil = Date().addingTimeInterval(3)
                 }
-            }
-            .onChange(of: self.currentIndex) { previous, index in
+            )
+            .onChange(of: self.currentIndex) { index in
                 guard let index, Date() >= self.followPausedUntil else { return }
-                // The first jump (sheet just opened) is instant; the rest glide.
-                if previous == nil {
+                withAnimation(.spring(response: 0.6, dampingFraction: 0.85)) {
                     proxy.scrollTo(index, anchor: UnitPoint(x: 0.5, y: 0.3))
-                } else {
-                    withAnimation(.spring(duration: 0.6)) { proxy.scrollTo(index, anchor: UnitPoint(x: 0.5, y: 0.3)) }
                 }
             }
         }
@@ -108,7 +105,7 @@ struct SyncedLyricsView: View {
                 let timeMs = Int(self.environment.player.state.position() * 1000)
                 let index = self.lyrics.currentLineIndex(at: timeMs)
                 if index != self.currentIndex { self.currentIndex = index }
-                try? await Task.sleep(for: .milliseconds(200))
+                try? await Task.sleep(nanoseconds: 200000000)
             }
         }
     }

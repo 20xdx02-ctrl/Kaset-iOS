@@ -31,7 +31,7 @@ final class AccountSwitcher: NSObject, WKNavigationDelegate {
             self.continuation = continuation
             webView.load(URLRequest(url: url))
             Task { [weak self] in
-                try? await Task.sleep(for: .seconds(10))
+                try? await Task.sleep(nanoseconds: 10000000000)
                 self?.finish()
             }
         }

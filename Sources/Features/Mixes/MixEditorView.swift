@@ -12,7 +12,7 @@ struct MixEditorView: View {
         #endif
     }
 
-    @Environment(AppEnvironment.self) private var environment
+    @EnvironmentObject private var environment: AppEnvironment
     @Environment(\.dismiss) private var dismiss
 
     private let isNew: Bool
@@ -33,7 +33,7 @@ struct MixEditorView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        NavigationStackCompat {
             List {
                 if self.query.isEmpty {
                     self.nameSection
@@ -264,7 +264,7 @@ struct MixEditorView: View {
             self.results = []
             return
         }
-        try? await Task.sleep(for: .milliseconds(300))
+        try? await Task.sleep(nanoseconds: 300000000)
         guard !Task.isCancelled else { return }
         self.isSearching = true
         defer { self.isSearching = false }

@@ -1,5 +1,5 @@
 import Foundation
-import Observation
+import Combine
 
 /// The plays recorded on this device, for the listening recap, one history per Google account.
 /// Kept in a JSON file per account in Application Support and, once the user picked a folder
@@ -7,8 +7,7 @@ import Observation
 /// same history. CloudKit would need a paid developer account; a file the user picks works
 /// without one. Nothing is recorded as a guest.
 @MainActor
-@Observable
-final class ListeningHistory {
+final class ListeningHistory: ObservableObject {
     /// The shared file of single-account versions; merged once into the account that inherited
     /// this device's history.
     nonisolated static let legacySyncFileName = "Kaset Listening History.json"
@@ -25,22 +24,22 @@ final class ListeningHistory {
     /// Least time between two syncs triggered by new plays.
     private static let syncInterval: TimeInterval = 10 * 60
 
-    private(set) var log: ListeningLog
+    @Published private(set) var log: ListeningLog
     /// Name of the sync folder, `nil` when syncing is off.
-    private(set) var syncFolderName: String?
-    private(set) var isSyncing = false
-    private(set) var lastSync: Date?
-    private(set) var syncError: String?
+    @Published private(set) var syncFolderName: String?
+    @Published private(set) var isSyncing = false
+    @Published private(set) var lastSync: Date?
+    @Published private(set) var syncError: String?
 
-    @ObservationIgnored private var tracker = PlayTracker()
+    private var tracker = PlayTracker()
     /// The active account's file; `nil` as a guest (nothing is recorded).
-    @ObservationIgnored private var fileURL: URL?
-    @ObservationIgnored private var accountID: UUID?
+    private var fileURL: URL?
+    private var accountID: UUID?
     /// Email of the active account: names its sync file. Unknown yet: no syncing.
-    private(set) var accountEmail: String?
-    @ObservationIgnored private var lastSave = Date.distantPast
-    @ObservationIgnored private var hasUnsavedChanges = false
-    @ObservationIgnored private let spikeLog = SpikeLog.shared
+    @Published private(set) var accountEmail: String?
+    private var lastSave = Date.distantPast
+    private var hasUnsavedChanges = false
+    private let spikeLog = SpikeLog.shared
 
     var plays: [ListenedPlay] { self.log.plays }
 

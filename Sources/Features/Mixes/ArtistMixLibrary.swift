@@ -1,21 +1,20 @@
 import Foundation
-import Observation
+import Combine
 
 /// The user's artist mixes. Each one is a private YouTube Music playlist. The mapping
 /// playlist id → settings is kept on the device (that is what Home lists and what tells a
 /// playlist screen it is a mix); the settings are also written to the playlist description
 /// so another device can pick the mix up.
 @MainActor
-@Observable
-final class ArtistMixLibrary {
+final class ArtistMixLibrary: ObservableObject {
     private static let cacheKey = "mixes.cache"
     /// v2: v1 could record mix playlists as non-mixes (their description was not read).
     private static let nonMixKey = "mixes.nonMixPlaylists.v2"
 
-    private(set) var mixes: [ArtistMix]
+    @Published private(set) var mixes: [ArtistMix]
     /// The playlist being created or regenerated, for progress indicators.
-    private(set) var busyPlaylistId: String?
-    private(set) var isCreating = false
+    @Published private(set) var busyPlaylistId: String?
+    @Published private(set) var isCreating = false
 
     private let defaults: UserDefaults
     /// Library playlists already read and found not to be mixes (their description is not

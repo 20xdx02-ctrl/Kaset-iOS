@@ -3,7 +3,7 @@ import SwiftUI
 /// Sidebar of the main window, laid out like Kaset for macOS (and Apple Music): Search and Home,
 /// then Discover, Collection and the user's playlists, with the profile at the bottom.
 struct MacSidebar: View {
-    @Environment(AppEnvironment.self) private var environment
+    @EnvironmentObject private var environment: AppEnvironment
     @Environment(MacShell.self) private var shell
 
     @State private var isCreatingPlaylist = false
@@ -146,7 +146,7 @@ struct MacSidebarRow: View {
 
 /// Profile at the bottom of the sidebar: avatar and name with an account menu, or Sign in.
 private struct MacSidebarFooter: View {
-    @Environment(AppEnvironment.self) private var environment
+    @EnvironmentObject private var environment: AppEnvironment
     @Environment(MacShell.self) private var shell
     @Environment(\.openSettings) private var openSettings
 
