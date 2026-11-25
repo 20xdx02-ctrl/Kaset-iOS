@@ -5,3 +5,8 @@ DerivedData/
 .DS_Store
 xcuserdata/
 Mac/Info.plist
+
+# CI artifacts
+build.log
+build-log.zip
+build/
