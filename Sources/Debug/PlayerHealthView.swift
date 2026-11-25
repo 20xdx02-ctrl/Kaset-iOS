@@ -3,7 +3,7 @@ import SwiftUI
 /// Which parts of the YouTube Music page the app drives still respond. Refreshes while open,
 /// so a DOM change after a YouTube Music update is visible at a glance.
 struct PlayerHealthView: View {
-    let player: WebPlayer
+    let player: KasetPlayer
 
     var body: some View {
         List {

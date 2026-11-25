@@ -5,7 +5,7 @@ struct LyricsSheet: View {
     @EnvironmentObject private var environment: AppEnvironment
     /// Player updates are observed here instead of through `environment`: forwarding
     /// every player tick through the app-wide environment invalidated the whole view tree.
-    @EnvironmentObject private var observedPlayer: WebPlayer
+    @EnvironmentObject private var observedPlayer: KasetPlayer
     @Environment(\.dismiss) private var dismiss
 
     let model: NowPlayingModel?
@@ -71,7 +71,7 @@ struct SyncedLyricsView: View {
     @EnvironmentObject private var environment: AppEnvironment
     /// Player updates are observed here instead of through `environment`: forwarding
     /// every player tick through the app-wide environment invalidated the whole view tree.
-    @EnvironmentObject private var observedPlayer: WebPlayer
+    @EnvironmentObject private var observedPlayer: KasetPlayer
 
     let lyrics: SyncedLyrics
     var fontSize: CGFloat = 28

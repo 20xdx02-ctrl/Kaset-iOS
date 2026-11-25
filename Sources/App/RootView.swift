@@ -5,8 +5,6 @@ import SwiftUI
 /// keeps running.
 struct RootView: View {
     @EnvironmentObject private var environment: AppEnvironment
-    /// Keeps the hidden web view attached when the player recreates it (`generation` changes).
-    @EnvironmentObject private var observedPlayer: WebPlayer
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
@@ -22,21 +20,6 @@ struct RootView: View {
                 #else
                 MacMainWindow()
                 #endif
-            }
-        }
-        .background(alignment: .topLeading) {
-            // In native mode no web document is ever loaded, so there is no reason to put a
-            // WKWebView in the window hierarchy at all.
-            if !environment.useNativePlayback {
-                WebViewHost(webView: environment.player.webView)
-                    .id(environment.player.generation)
-                    // An invisible page with a real viewport: at 1×1 the web app lays out as a tiny
-                    // viewport and its queue/player-bar DOM is not reliably populated. iOS's desktop
-                    // content mode widens a phone-sized view to a desktop viewport; macOS uses the
-                    // frame as is, and below ~1000 pt YouTube Music drops its player bar.
-                    .frame(width: Platform.isMac ? 1280 : 390, height: Platform.isMac ? 800 : 844)
-                    .opacity(0)
-                    .allowsHitTesting(false)
             }
         }
         .task { await environment.start() }

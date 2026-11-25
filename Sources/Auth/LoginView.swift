@@ -62,7 +62,7 @@ struct LoginView {
         let webView = WKWebView(frame: .zero, configuration: configuration)
         #if os(macOS)
         // Same as Kaset for macOS: the desktop Safari UA signs in on the Mac.
-        webView.customUserAgent = WebPlayer.desktopUserAgent
+        webView.customUserAgent = KasetPlayer.desktopUserAgent
         #endif
         webView.navigationDelegate = coordinator
         #if DEBUG

@@ -12,10 +12,8 @@ final class AppEnvironment: ObservableObject {
     let accounts: AccountRegistry
     let auth: AuthStore
     let client: YTMusicClient
-    let player: WebPlayer
-    /// Native AVPlayer path ported from Opaline. Used on demand for a track; it does not
-    /// load the YouTube Music site, so it is much lighter than the web player.
-    let nativePlayer = NativePlayer()
+    /// Native AVPlayer engine (Opaline-derived). No WebKit, no injected page scripts.
+    let player = KasetPlayer()
     let mixes = ArtistMixLibrary()
     let newReleases = NewReleaseWatcher()
     let listening = ListeningHistory()
@@ -30,17 +28,6 @@ final class AppEnvironment: ObservableObject {
 
     /// Full-screen Now Playing. Lives here so any screen can open it (e.g. cover quick-play).
     @Published var isNowPlayingPresented = false
-
-    /// Native (Opaline-derived) playback is the default: it avoids booting the
-    /// music.youtube.com web app at launch. Set to false to fall back to the web player.
-    var useNativePlayback: Bool {
-        get { UserDefaults.standard.object(forKey: "playback.native") as? Bool ?? true }
-        set { UserDefaults.standard.set(newValue, forKey: "playback.native") }
-    }
-
-    /// Video being played natively, and the sheet that hosts the native player.
-    @Published private(set) var nativePlayingVideoID: String?
-    @Published var isNativePlayerPresented = false
 
     /// Bumped after the user's library changes (playlist created, renamed, deleted) so the
     /// Library screen reloads.
@@ -108,7 +95,6 @@ final class AppEnvironment: ObservableObject {
         let auth = AuthStore(vault: accounts.activeVault, dataStore: accounts.activeDataStore)
         self.auth = auth
         self.client = YTMusicClient(auth: auth)
-        self.player = WebPlayer(dataStore: { accounts.activeDataStore })
         self.client.brandIdProvider = { accounts.active?.brandId }
         let listening = self.listening
         self.player.onStateChange = { state, date in listening.playbackChanged(state, at: date) }
@@ -125,71 +111,37 @@ final class AppEnvironment: ObservableObject {
         // The player is deliberately NOT forwarded. It changes on every message from the page
         // (heartbeats, position, ads), so coarse forwarding through this app-wide object made
         // every SwiftUI view re-render constantly. Views that show player state observe
-        // `WebPlayer` directly through `@EnvironmentObject` instead.
+        // `KasetPlayer` directly through `@EnvironmentObject` instead.
         forward(mixes.objectWillChange)
         forward(newReleases.objectWillChange)
         // `listening.log` changes on every playback report once a play crosses the 30 s
         // threshold, so it is observed directly by the Recap screen instead.
     }
 
-    /// Plays an entity without opening its page. Playlists use their id as the queue; an album's
-    /// playable `OLAK…` id is only known from its detail, so that is fetched first.
+    /// Plays an entity with the native AVPlayer engine. Collections are resolved through the
+    /// ordinary Innertube browse API, so no YouTube Music page is ever loaded.
     func playEntity(_ entity: MediaEntity, opensNowPlaying: Bool = true) {
-        if self.useNativePlayback {
-            self.playEntityNatively(entity)
-            return
-        }
-        if opensNowPlaying, entity.target.isPlayableCollection { self.isNowPlayingPresented = true }
         switch entity.target {
         case let .song(videoId):
-            self.player.play(videoId: videoId, playlistId: "RDAMVM\(videoId)")
-        case let .playlist(id):
-            self.player.play(videoId: nil, playlistId: MediaEntity.watchPlaylistId(id))
-        case let .album(id):
-            Task {
-                guard let detail = try? await self.client.getPlaylist(id: id).detail else { return }
-                if let target = detail.libraryTargetId, !target.isEmpty {
-                    self.player.play(videoId: nil, playlistId: MediaEntity.watchPlaylistId(target))
-                } else if let first = detail.tracks.first(where: \.isPlayable) {
-                    self.player.play(videoId: first.videoId, playlistId: "RDAMVM\(first.videoId)")
-                }
-            }
-        case .artist, .mood, .unsupported:
-            break
-        }
-    }
-
-    /// Opaline-style playback: resolve streams through the Innertube `/player` request and
-    /// hand them to AVPlayer. No page scripts, no heartbeat polling, no hidden web app.
-    private func playEntityNatively(_ entity: MediaEntity) {
-        switch entity.target {
-        case let .song(videoId):
-            self.presentNative([videoId])
+            self.player.setQueue([videoId])
+            self.isNowPlayingPresented = true
+            Task { await self.player.play(videoID: videoId) }
         case let .playlist(id), let .album(id):
             Task {
-                let ids = (try? await self.client.getPlaylist(id: id).detail.tracks) ?? []
-                let playable = ids.filter(\.isPlayable).map(\.videoId)
-                if playable.isEmpty {
-                    // No tracks from the API: the web player can still open the collection.
-                    self.useNativePlayback = false
-                    self.player.play(videoId: nil, playlistId: MediaEntity.watchPlaylistId(id))
-                    self.isNowPlayingPresented = true
-                } else {
-                    self.presentNative(playable, start: 0)
-                }
+                let tracks = (try? await self.client.getPlaylist(id: id).detail.tracks) ?? []
+                let ids = tracks.filter(\.isPlayable).map(\.videoId)
+                guard !ids.isEmpty else { return }
+                self.player.setQueue(ids)
+                self.isNowPlayingPresented = true
+                await self.player.playQueue(ids)
             }
         case .artist, .mood, .unsupported:
             break
         }
     }
 
-    private func presentNative(_ ids: [String], start: Int = 0) {
-        guard let id = ids.indices.contains(start) ? ids[start] : ids.first else { return }
-        self.nativePlayer.setQueue(ids, startingAt: start)
-        self.nativePlayingVideoID = id
-        // The player sheet starts playback on appear, so nothing loads twice.
-        self.isNativePlayerPresented = true
-    }
+    /// Kept for callers that used the old web-reload path; native playback needs no reload.
+    func reloadPlayer(clearingSession: Bool = false) {}
 
     /// Switches personal/brand identity within the active Google account: web session first,
     /// then API scope, then the player.
@@ -198,7 +150,7 @@ final class AppEnvironment: ObservableObject {
         await self.accountSwitcher.switchSession(to: account, in: self.accounts.activeDataStore)
         self.accounts.update(id) { $0.brandId = account.brandId }
         self.client.resetSessionState()
-        self.player.reload()
+        self.reloadPlayer()
         self.accountRevision += 1
         await self.refreshAccount()
     }
@@ -212,21 +164,20 @@ final class AppEnvironment: ObservableObject {
         await self.auth.activate(dataStore: self.accounts.activeDataStore, vault: self.accounts.activeVault)
         self.client.resetSessionState()
         URLCache.shared.removeAllCachedResponses()
-        self.player.reload(clearingSession: true)
+        self.reloadPlayer()
         self.libraryRevision += 1
         self.accountRevision += 1
         await self.refreshAccount()
     }
 
-    /// Launch work: put the archived session back, and reload the web view if it was missing.
+    /// Launch work: put the archived session back and refresh the account.
     func start() async {
         await self.restoreSession()
         await self.refreshAccount()
         await self.accounts.removeOrphanedDataStores(keeping: Set([self.loginAccountID].compactMap { $0 }))
     }
 
-    /// Runs once, whoever asks first: the launch, or an intent that arrives before it. A play
-    /// issued after this is not lost to the reload.
+    /// Runs once, whoever asks first: the launch, or an intent that arrives before it.
     func restoreSession() async {
         let task = self.restoreTask ?? Task {
             let migrated = await self.accounts.migrateLegacySessionIfNeeded(
@@ -235,11 +186,6 @@ final class AppEnvironment: ObservableObject {
             let restored = migrated
                 ? await self.auth.activate(dataStore: self.accounts.activeDataStore, vault: self.accounts.activeVault)
                 : await self.auth.restore()
-            // A web reload boots the whole YouTube Music page. In native mode it is not
-            // needed for playback and would undo the launch-time optimisation.
-            if (migrated || restored) && !self.useNativePlayback {
-                self.player.reload()
-            }
         }
         self.restoreTask = task
         await task.value

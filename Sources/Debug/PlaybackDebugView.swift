@@ -2,7 +2,7 @@ import SwiftUI
 
 /// K4 verification screen: transport, state readout, queue, play-next, log.
 struct PlaybackDebugView: View {
-    let player: WebPlayer
+    let player: KasetPlayer
     @ObservedObject private var log = SpikeLog.shared
     @AppStorage("nativeNowPlaying") private var nativeNowPlaying = true
     @State private var videoId = ""

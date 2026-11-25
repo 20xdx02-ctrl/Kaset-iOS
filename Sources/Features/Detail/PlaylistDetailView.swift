@@ -97,7 +97,7 @@ struct PlaylistDetailView: View {
     @EnvironmentObject private var environment: AppEnvironment
     /// Player updates are observed here instead of through `environment`: forwarding
     /// every player tick through the app-wide environment invalidated the whole view tree.
-    @EnvironmentObject private var observedPlayer: WebPlayer
+    @EnvironmentObject private var observedPlayer: KasetPlayer
     @StateObject private var modelHolder = ObservableHolder<PlaylistDetailModel>()
     private var model: PlaylistDetailModel? {
         get { self.modelHolder.inner }
@@ -432,7 +432,7 @@ struct TrackRow: View {
     @EnvironmentObject private var environment: AppEnvironment
     /// Player updates are observed here instead of through `environment`: forwarding
     /// every player tick through the app-wide environment invalidated the whole view tree.
-    @EnvironmentObject private var observedPlayer: WebPlayer
+    @EnvironmentObject private var observedPlayer: KasetPlayer
 
     let song: Song
     var index: Int?

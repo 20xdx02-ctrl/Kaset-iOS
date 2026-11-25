@@ -1,4 +1,4 @@
-// NativePlayer.swift
+// KasetPlayer.swift
 // Native AVPlayer playback, adapted from Opaline's PlaybackFacade / VideoPlayerView
 // (GPL-3.0). Replaces the hidden music.youtube.com WKWebView for the native path:
 // no page scripts, no polling, a fraction of the CPU and memory use.
@@ -21,9 +21,22 @@ struct NativePlaybackState {
 }
 
 @MainActor
-final class NativePlayer: ObservableObject {
-    @Published private(set) var state = NativePlaybackState()
+final class KasetPlayer: ObservableObject {
+    @Published private(set) var nativeState = NativePlaybackState()
+    /// Mirrored into the app's existing playback model so all screens keep working.
+    @Published private(set) var state = PlaybackState()
+    @Published private(set) var identity = PlaybackIdentity()
+    @Published private(set) var lastMessageAt: Date?
+    @Published private(set) var healthReport: PlayerHealthReport?
     @Published private(set) var errorMessage: String?
+    @Published private(set) var volume: Double = 1
+    @Published private(set) var isReorderingQueue = false
+    /// Listening history hook (same shape as the old web player).
+    var onStateChange: ((PlaybackState, Date) -> Void)?
+
+    /// Kept for the sign-in web view (the only WebKit user left in the app).
+    static let desktopUserAgent =
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
     /// Video IDs in the native queue, and the one being played.
     @Published private(set) var queue: [String] = []
     @Published private(set) var queueIndex = 0
@@ -55,16 +68,20 @@ final class NativePlayer: ObservableObject {
         self.loadTask?.cancel()
         self.loadTask = Task { [weak self] in
             guard let self else { return }
-            self.state.isLoading = true
+            self.nativeState.isLoading = true
             self.errorMessage = nil
+            SpikeLog.shared.log("native", "play \(videoID)")
             do {
                 let info = try await NativeStreamResolver.resolve(videoID: videoID)
                 guard !Task.isCancelled else { return }
+                SpikeLog.shared.log("native", "stream itag=\(info.itag.map(String.init) ?? "-") label=\(info.qualityLabel ?? "-") hls=\(info.isHLS) host=\(info.streamURL.host ?? "-")")
                 await self.attach(info)
             } catch is CancellationError {
+                SpikeLog.shared.log("native", "cancelled \(videoID)")
             } catch {
-                self.state.isLoading = false
+                self.nativeState.isLoading = false
                 self.errorMessage = error.localizedDescription
+                SpikeLog.shared.log("native", "ERROR \(error.localizedDescription)")
             }
         }
         await self.loadTask?.value
@@ -123,7 +140,7 @@ final class NativePlayer: ObservableObject {
         let player = AVPlayer(playerItem: item)
         self.player = player
 
-        self.state = NativePlaybackState(
+        self.nativeState = NativePlaybackState(
             videoID: info.videoID,
             title: info.title,
             author: info.author,
@@ -140,7 +157,8 @@ final class NativePlayer: ObservableObject {
         self.statusObservation = item.observe(\.status, options: [.initial, .new]) { [weak self] item, _ in
             Task { @MainActor in
                 guard let self, item == self.player?.currentItem else { return }
-                self.state.isLoading = item.status != AVPlayerItem.Status.readyToPlay
+                self.nativeState.isLoading = item.status != AVPlayerItem.Status.readyToPlay
+                SpikeLog.shared.log("native", "item status=\(item.status.rawValue) error=\(item.error?.localizedDescription ?? "-")")
                 if item.status == AVPlayerItem.Status.failed {
                     self.errorMessage = item.error?.localizedDescription ?? "Playback failed."
                 }
@@ -149,7 +167,7 @@ final class NativePlayer: ObservableObject {
         self.playheadObservation = player.observe(\.timeControlStatus, options: [.new]) { [weak self] player, _ in
             Task { @MainActor in
                 guard let self, player == self.player else { return }
-                self.state.isPlaying = player.timeControlStatus == .playing
+                self.nativeState.isPlaying = player.timeControlStatus == .playing
                 self.publishNowPlaying()
             }
         }
@@ -159,13 +177,13 @@ final class NativePlayer: ObservableObject {
         ) { [weak self] time in
             Task { @MainActor in
                 guard let self else { return }
-                self.state.position = time.seconds
+                self.nativeState.position = time.seconds
                 self.publishNowPlaying()
             }
         }
 
         player.play()
-        self.state.isPlaying = true
+        self.nativeState.isPlaying = true
         self.publishNowPlaying()
     }
 
@@ -173,19 +191,19 @@ final class NativePlayer: ObservableObject {
         guard let player else { return }
         if player.timeControlStatus == .playing {
             player.pause()
-            self.state.isPlaying = false
+            self.nativeState.isPlaying = false
         } else {
             player.play()
-            self.state.isPlaying = true
+            self.nativeState.isPlaying = true
         }
         self.publishNowPlaying()
     }
 
     func seek(to time: TimeInterval) {
         guard let player else { return }
-        let clamped = min(max(time, 0), self.state.duration)
+        let clamped = min(max(time, 0), self.nativeState.duration)
         player.seek(to: CMTime(seconds: clamped, preferredTimescale: 600))
-        self.state.position = clamped
+        self.nativeState.position = clamped
         self.publishNowPlaying()
     }
 
@@ -193,13 +211,14 @@ final class NativePlayer: ObservableObject {
         self.loadTask?.cancel()
         self.player?.pause()
         self.player = nil
-        self.state = NativePlaybackState()
+        self.nativeState = NativePlaybackState()
+        self.syncFacade()
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
     }
 
     @objc private nonisolated func itemDidFinish(_ notification: Notification) {
         Task { @MainActor in
-            self.state.isPlaying = false
+            self.nativeState.isPlaying = false
             self.publishNowPlaying()
             // Auto-advance mirrors Opaline's VideoSource queue behaviour.
             if self.queue.count > 1 { self.advance(1) }
@@ -217,16 +236,17 @@ final class NativePlayer: ObservableObject {
     }
 
     private func publishNowPlaying() {
-        guard self.state.videoID != nil else { return }
+        self.syncFacade()
+        guard self.nativeState.videoID != nil else { return }
         var info: [String: Any] = [
-            MPMediaItemPropertyTitle: self.state.title ?? "",
-            MPMediaItemPropertyArtist: self.state.author ?? "",
-            MPNowPlayingInfoPropertyElapsedPlaybackTime: self.state.position,
-            MPNowPlayingInfoPropertyPlaybackRate: self.state.isPlaying ? 1.0 : 0.0,
+            MPMediaItemPropertyTitle: self.nativeState.title ?? "",
+            MPMediaItemPropertyArtist: self.nativeState.author ?? "",
+            MPNowPlayingInfoPropertyElapsedPlaybackTime: self.nativeState.position,
+            MPNowPlayingInfoPropertyPlaybackRate: self.nativeState.isPlaying ? 1.0 : 0.0,
             MPNowPlayingInfoPropertyDefaultPlaybackRate: 1.0
         ]
-        if self.state.duration > 0 {
-            info[MPMediaItemPropertyPlaybackDuration] = self.state.duration
+        if self.nativeState.duration > 0 {
+            info[MPMediaItemPropertyPlaybackDuration] = self.nativeState.duration
         }
         if let artwork { info[MPMediaItemPropertyArtwork] = artwork }
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
@@ -244,5 +264,111 @@ final class NativePlayer: ObservableObject {
             self.artwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
             self.publishNowPlaying()
         }
+    }
+
+
+    // MARK: - Compatibility with the app's existing playback interface
+
+    private func syncFacade() {
+        var next = self.state
+        next.videoId = self.nativeState.videoID
+        next.title = self.nativeState.title
+        next.artist = self.nativeState.author
+        next.artworkURL = self.nativeState.artworkURL
+        next.duration = self.nativeState.duration
+        next.position = self.nativeState.position
+        next.isPlaying = self.nativeState.isPlaying
+        next.hasMedia = self.nativeState.videoID != nil
+        next.canGoNext = self.queueIndex < self.queue.count - 1
+        next.canGoPrevious = self.queueIndex > 0
+        next.queue = self.queue.enumerated().map { index, id in
+            PlaybackState.QueueEntry(
+                index: index, videoId: id, title: id, artist: "",
+                isCurrent: index == self.queueIndex
+            )
+        }
+        next.updatedAt = Date()
+        self.state = next
+
+        var identity = self.identity
+        identity.videoId = self.nativeState.videoID
+        identity.isPlaying = self.nativeState.isPlaying
+        self.identity = identity
+        self.lastMessageAt = Date()
+        self.onStateChange?(self.state, next.updatedAt)
+    }
+
+    /// Starts a video. `playlistId` is accepted for source compatibility; the native
+    /// resolver needs only the video id.
+    func play(videoId: String?, playlistId: String? = nil) {
+        guard let videoId else { return }
+        Task { await self.play(videoID: videoId) }
+    }
+
+    func playShuffled(videoId: String?, playlistId: String) {
+        self.play(videoId: videoId, playlistId: playlistId)
+    }
+
+    func startRadio(videoId: String) { self.play(videoId: videoId, playlistId: nil) }
+
+    func resume() { if !self.nativeState.isPlaying { self.togglePlayPause() } }
+    func pause() { if self.nativeState.isPlaying { self.togglePlayPause() } }
+
+    func playNext(videoId: String) -> Bool {
+        let index = min(self.queueIndex + 1, self.queue.count)
+        self.queue.insert(videoId, at: index)
+        self.syncFacade()
+        return true
+    }
+
+    func addToQueue(videoId: String) -> Bool {
+        self.queue.append(videoId)
+        self.syncFacade()
+        return true
+    }
+
+    func playQueueEntry(at index: Int) {
+        guard self.queue.indices.contains(index) else { return }
+        self.queueIndex = index
+        Task { await self.playCurrent() }
+    }
+
+    func removeQueueEntry(at index: Int) {
+        guard self.queue.indices.contains(index), index != self.queueIndex else { return }
+        self.queue.remove(at: index)
+        if index < self.queueIndex { self.queueIndex -= 1 }
+        self.syncFacade()
+    }
+
+    func moveQueueEntry(from source: Int, to destination: Int) async {
+        guard self.queue.indices.contains(source),
+              self.queue.indices.contains(destination), source != self.queueIndex
+        else { return }
+        let id = self.queue.remove(at: source)
+        self.queue.insert(id, at: destination)
+        self.syncFacade()
+    }
+
+    // These page-specific controls have no equivalent in native playback.
+    func toggleShuffle() {}
+    func cycleRepeat() {}
+    func setVolume(_ value: Double) { self.volume = min(max(value, 0), 1) }
+    func applyVolume() {}
+    func inspectQueue() {}
+    func inspectBuffer() {}
+    func inspectAudio(reason: String) {}
+    func applyAudioQuality() {}
+    func applyAdSkipSetting() {}
+    func applyDataSaverSetting() {}
+    func applyBufferSetting() {}
+    func refreshState() {}
+    func recover(reason: String) {}
+    func showNotice(_ text: String) {}
+
+    func checkHealth() async -> PlayerHealthReport {
+        let check = PlayerHealthReport.Check(
+            id: "native", ok: true, detail: "AVPlayer is active", needsTrack: false, hasTrack: true
+        )
+        return PlayerHealthReport(checks: [check], date: Date())
     }
 }

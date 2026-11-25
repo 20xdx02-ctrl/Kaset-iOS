@@ -4,7 +4,7 @@ import SwiftUI
 /// Removed once the real Home/Search screens land (K6).
 struct APIDebugView: View {
     let client: YTMusicClient
-    let player: WebPlayer
+    let player: KasetPlayer
 
     @State private var sections: [HomeSection] = []
     @State private var results: [SearchResultItem] = []

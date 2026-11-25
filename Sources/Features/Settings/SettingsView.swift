@@ -5,14 +5,13 @@ struct SettingsView: View {
     @EnvironmentObject private var environment: AppEnvironment
     /// Player updates are observed here instead of through `environment`: forwarding
     /// every player tick through the app-wide environment invalidated the whole view tree.
-    @EnvironmentObject private var observedPlayer: WebPlayer
+    @EnvironmentObject private var observedPlayer: KasetPlayer
     @Environment(\.dismiss) private var dismiss
 
     @AppStorage(PlaybackAudioQuality.storageKey) private var audioQuality = PlaybackAudioQuality.auto.rawValue
     @AppStorage(ContentLanguage.storageKey) private var language = ContentLanguage.system.rawValue
     @AppStorage(Haptics.storageKey) private var haptics = true
     @AppStorage("nativeNowPlaying") private var nativeNowPlaying = true
-    @AppStorage("playback.native") private var useNativePlayback = true
     @AppStorage(AdSkip.storageKey) private var adAutoSkip = false
     @AppStorage(DataSaver.storageKey) private var dataSaver = true
     @AppStorage("settings.handlePhoneCalls") private var handlePhoneCalls = true
@@ -30,14 +29,6 @@ struct SettingsView: View {
                 self.accountSection
 
                 Section {
-                    Toggle("Native playback (faster, experimental)", isOn: self.$useNativePlayback)
-                        .onChange(of: self.useNativePlayback) { enabled in
-                            if enabled {
-                                self.environment.nativePlayer.stop()
-                            } else {
-                                self.environment.player.ensureLoaded()
-                            }
-                        }
                     Picker("Audio quality", selection: self.$audioQuality) {
                         ForEach(PlaybackAudioQuality.allCases) { Text($0.displayName).tag($0.rawValue) }
                     }

@@ -5,7 +5,7 @@ import SwiftUI
 struct PlaybackCommands: Commands {
     let environment: AppEnvironment
 
-    private var player: WebPlayer { self.environment.player }
+    private var player: KasetPlayer { self.environment.player }
 
     var body: some Commands {
         CommandMenu("Controls") {
