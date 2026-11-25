@@ -4,6 +4,9 @@ import SwiftUI
 /// the others, so each one shows it itself.
 struct QueueNoticeBanner: ViewModifier {
     @EnvironmentObject private var environment: AppEnvironment
+    /// Player updates are observed here instead of through `environment`: forwarding
+    /// every player tick through the app-wide environment invalidated the whole view tree.
+    @EnvironmentObject private var observedPlayer: WebPlayer
 
     func body(content: Content) -> some View {
         content

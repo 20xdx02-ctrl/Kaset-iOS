@@ -108,10 +108,14 @@ final class AppEnvironment: ObservableObject {
         }
         forward(accounts.objectWillChange)
         forward(auth.objectWillChange)
-        forward(player.objectWillChange)
+        // The player is deliberately NOT forwarded. It changes on every message from the page
+        // (heartbeats, position, ads), so coarse forwarding through this app-wide object made
+        // every SwiftUI view re-render constantly. Views that show player state observe
+        // `WebPlayer` directly through `@EnvironmentObject` instead.
         forward(mixes.objectWillChange)
         forward(newReleases.objectWillChange)
-        forward(listening.objectWillChange)
+        // `listening.log` changes on every playback report once a play crosses the 30 s
+        // threshold, so it is observed directly by the Recap screen instead.
     }
 
     /// Plays an entity without opening its page. Playlists use their id as the queue; an album's

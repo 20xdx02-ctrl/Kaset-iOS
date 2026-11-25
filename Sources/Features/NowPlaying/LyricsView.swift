@@ -3,6 +3,9 @@ import SwiftUI
 /// Lyrics of whatever the page is playing; follows track changes while open.
 struct LyricsSheet: View {
     @EnvironmentObject private var environment: AppEnvironment
+    /// Player updates are observed here instead of through `environment`: forwarding
+    /// every player tick through the app-wide environment invalidated the whole view tree.
+    @EnvironmentObject private var observedPlayer: WebPlayer
     @Environment(\.dismiss) private var dismiss
 
     let model: NowPlayingModel?
@@ -66,6 +69,9 @@ struct PlainLyricsView: View {
 /// Scrolling by hand pauses the follow for a few seconds, as in Apple Music.
 struct SyncedLyricsView: View {
     @EnvironmentObject private var environment: AppEnvironment
+    /// Player updates are observed here instead of through `environment`: forwarding
+    /// every player tick through the app-wide environment invalidated the whole view tree.
+    @EnvironmentObject private var observedPlayer: WebPlayer
 
     let lyrics: SyncedLyrics
     var fontSize: CGFloat = 28

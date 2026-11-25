@@ -6,6 +6,9 @@ import SwiftUI
 /// from `PlaybackState`, which only changes when the page reports back.
 struct NowPlayingView: View {
     @EnvironmentObject private var environment: AppEnvironment
+    /// Player updates are observed here instead of through `environment`: forwarding
+    /// every player tick through the app-wide environment invalidated the whole view tree.
+    @EnvironmentObject private var observedPlayer: WebPlayer
     @Environment(\.dismiss) private var dismiss
 
     @StateObject private var modelHolder = ObservableHolder<NowPlayingModel>()

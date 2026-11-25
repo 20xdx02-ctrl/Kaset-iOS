@@ -5,6 +5,8 @@ import UniformTypeIdentifiers
 /// the day and new artists, from the plays recorded on the device.
 struct RecapView: View {
     @EnvironmentObject private var environment: AppEnvironment
+    /// Recap reads `listening.plays`, which changes on every playback report.
+    @EnvironmentObject private var observedListening: ListeningHistory
     @State private var period: RecapPeriod = .month
     /// 0 = the current period, -1 the one before, …
     @State private var offset = 0

@@ -9,6 +9,9 @@ extension View {
 /// Square (or circular) artwork card used in shelves.
 struct MediaCard: View {
     @EnvironmentObject private var environment: AppEnvironment
+    /// Player updates are observed here instead of through `environment`: forwarding
+    /// every player tick through the app-wide environment invalidated the whole view tree.
+    @EnvironmentObject private var observedPlayer: WebPlayer
 
     let entity: MediaEntity
     /// `nil` fills the proposed width (grids).
@@ -112,6 +115,9 @@ struct MediaRow: View {
 /// Songs and playlists play; albums and artists open their detail screen (K8).
 struct MediaActions<Content: View>: View {
     @EnvironmentObject private var environment: AppEnvironment
+    /// Player updates are observed here instead of through `environment`: forwarding
+    /// every player tick through the app-wide environment invalidated the whole view tree.
+    @EnvironmentObject private var observedPlayer: WebPlayer
 
     let entity: MediaEntity
     @ViewBuilder var content: Content

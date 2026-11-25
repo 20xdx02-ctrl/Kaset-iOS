@@ -4,6 +4,9 @@ import SwiftUI
 /// the page.
 struct MiniPlayerView: View {
     @EnvironmentObject private var environment: AppEnvironment
+    /// Player updates are observed here instead of through `environment`: forwarding
+    /// every player tick through the app-wide environment invalidated the whole view tree.
+    @EnvironmentObject private var observedPlayer: WebPlayer
 
     let onTap: () -> Void
 

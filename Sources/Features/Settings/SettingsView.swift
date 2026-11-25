@@ -3,6 +3,9 @@ import SwiftUI
 /// Account, playback and content preferences, plus diagnostics entry points.
 struct SettingsView: View {
     @EnvironmentObject private var environment: AppEnvironment
+    /// Player updates are observed here instead of through `environment`: forwarding
+    /// every player tick through the app-wide environment invalidated the whole view tree.
+    @EnvironmentObject private var observedPlayer: WebPlayer
     @Environment(\.dismiss) private var dismiss
 
     @AppStorage(PlaybackAudioQuality.storageKey) private var audioQuality = PlaybackAudioQuality.auto.rawValue

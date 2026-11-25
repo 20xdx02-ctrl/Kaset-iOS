@@ -5,6 +5,8 @@ import SwiftUI
 /// keeps running.
 struct RootView: View {
     @EnvironmentObject private var environment: AppEnvironment
+    /// Keeps the hidden web view attached when the player recreates it (`generation` changes).
+    @EnvironmentObject private var observedPlayer: WebPlayer
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {

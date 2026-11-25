@@ -95,6 +95,9 @@ final class PlaylistDetailModel: ObservableObject {
 /// Playlist or album: header, play / shuffle, tracks. Every action is a web player command.
 struct PlaylistDetailView: View {
     @EnvironmentObject private var environment: AppEnvironment
+    /// Player updates are observed here instead of through `environment`: forwarding
+    /// every player tick through the app-wide environment invalidated the whole view tree.
+    @EnvironmentObject private var observedPlayer: WebPlayer
     @StateObject private var modelHolder = ObservableHolder<PlaylistDetailModel>()
     private var model: PlaylistDetailModel? {
         get { self.modelHolder.inner }
@@ -427,6 +430,9 @@ struct PlaylistDetailView: View {
 /// A song in a list: tap plays, long press offers play next / add to queue / like.
 struct TrackRow: View {
     @EnvironmentObject private var environment: AppEnvironment
+    /// Player updates are observed here instead of through `environment`: forwarding
+    /// every player tick through the app-wide environment invalidated the whole view tree.
+    @EnvironmentObject private var observedPlayer: WebPlayer
 
     let song: Song
     var index: Int?
