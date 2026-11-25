@@ -20,6 +20,9 @@ targets:
         excludes:
           - Mac
           - Intents
+          # App Intents string catalog: Xcode refuses it below iOS 17. The Intents
+          # sources are not built into this target, so the catalog is not needed.
+          - App/AppShortcuts.xcstrings
     info:
       path: Sources/Info.plist
       properties:
@@ -58,6 +61,8 @@ targets:
         excludes:
           - Info.plist
           - Intents
+          # Same reason as the iOS target: App Intents catalogs need iOS 17 / macOS 14.
+          - App/AppShortcuts.xcstrings
           - Features/Shell/MainTabView.swift
           - Features/Shell/MiniPlayerView.swift
           - Features/NowPlaying/NowPlayingView.swift
