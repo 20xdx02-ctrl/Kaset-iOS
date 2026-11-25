@@ -29,7 +29,11 @@ struct MainTabView: View {
         .queueNoticeBanner()
         .onChange(of: self.router.homeRequest) { _ in self.selection = .home }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            MiniPlayerView(onTap: { self.environment.isNowPlayingPresented = true })
+            // Native playback owns its own sheet; the web mini player would otherwise show
+            // a stale "Not playing" bar while Opaline-style audio is running.
+            if !self.environment.isNativePlayerPresented {
+                MiniPlayerView(onTap: { self.environment.isNowPlayingPresented = true })
+            }
         }
         .fullScreenCover(isPresented: self.$environment.isNowPlayingPresented) {
             NowPlayingView()
