@@ -5,8 +5,9 @@ import SwiftUI
 struct SettingsToolbarButton: ToolbarContent {
     var body: some ToolbarContent {
         // macOS: the profile sits at the bottom of the sidebar and Settings is ⌘,.
-        if !Platform.isMac {
-            ToolbarItem(placement: .trailingBar) {
+        // Keep the item unconditional: `ToolbarContentBuilder.buildIf` is iOS 16+.
+        ToolbarItem(placement: .trailingBar) {
+            if !Platform.isMac {
                 SettingsSheetButton()
             }
         }

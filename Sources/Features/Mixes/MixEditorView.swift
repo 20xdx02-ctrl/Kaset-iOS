@@ -169,7 +169,9 @@ struct MixEditorView: View {
             }
             Toggle("Include similar artists", isOn: self.$mix.includesSimilarArtists)
             VStack(alignment: .leading, spacing: 4) {
-                LabeledContent("Discoveries") {
+                HStack {
+                    Text("Discoveries")
+                    Spacer()
                     Text(self.mix.discoveryPercent, format: .percent)
                         .monospacedDigit()
                 }

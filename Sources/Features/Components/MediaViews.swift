@@ -22,7 +22,7 @@ struct MediaCard: View {
                 .frame(width: self.width, height: self.width)
                 .aspectRatio(1, contentMode: .fit)
                 .overlay { ArtworkView(url: self.entity.thumbnailURL) }
-                .clipShape(self.entity.isCircular ? AnyShape(Circle()) : AnyShape(RoundedRectangle(cornerRadius: 10, style: .continuous)))
+                .clipShape(self.entity.isCircular ? AnyShapeCompat(Circle()) : AnyShapeCompat(RoundedRectangle(cornerRadius: 10, style: .continuous)))
                 .overlay {
                     if self.entity.isCircular {
                         Circle().strokeBorder(.primary.opacity(0.08))
@@ -95,7 +95,7 @@ struct MediaRow: View {
         HStack(spacing: 12) {
             ArtworkView(url: self.entity.thumbnailURL)
                 .frame(width: 56, height: 56)
-                .clipShape(self.entity.isCircular ? AnyShape(Circle()) : AnyShape(RoundedRectangle(cornerRadius: 8, style: .continuous)))
+                .clipShape(self.entity.isCircular ? AnyShapeCompat(Circle()) : AnyShapeCompat(RoundedRectangle(cornerRadius: 8, style: .continuous)))
             VStack(alignment: .leading, spacing: 2) {
                 Text(self.entity.title).font(.body).lineLimit(1)
                 if let subtitle = self.entity.subtitle {

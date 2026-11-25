@@ -92,7 +92,7 @@ struct RecapView: View {
                         change.formatted(.percent.precision(.fractionLength(0)).sign(strategy: .always())),
                         systemImage: change >= 0 ? "arrow.up.right" : "arrow.down.right"
                     )
-                    .fontWeight(.semibold)
+                    .font(.subheadline.weight(.semibold))
                     .foregroundStyle(change >= 0 ? .green : .orange)
                     Text("vs. the period before").foregroundStyle(.secondary)
                 }
@@ -157,7 +157,10 @@ struct RecapView: View {
             HStack(alignment: .bottom, spacing: 2) {
                 ForEach(Array(recap.minutesByHour.enumerated()), id: \.offset) { hour, minutes in
                     RoundedRectangle(cornerRadius: 2, style: .continuous)
-                        .fill(Color.brand.gradient)
+                        .fill(LinearGradient(
+                            colors: [Color.brand.opacity(0.55), Color.brand],
+                            startPoint: .bottom, endPoint: .top
+                        ))
                         .frame(maxWidth: .infinity)
                         .frame(height: max(2, CGFloat(minutes) / CGFloat(peak) * 140))
                         .accessibilityLabel("\(Self.hourLabel(hour)): \(minutes) minutes")

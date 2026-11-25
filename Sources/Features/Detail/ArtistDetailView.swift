@@ -206,10 +206,11 @@ struct ArtistDetailView: View {
     /// Follow lives in the navigation bar.
     @ToolbarContentBuilder
     private var artistToolbar: some ToolbarContent {
-        if let model = self.model, let detail = model.detail,
-           detail.channelId != nil, self.environment.auth.state == .signedIn
-        {
-            ToolbarItem(placement: .trailingBar) {
+        // `ToolbarContentBuilder.buildIf` is iOS 16+; keep the item and branch inside it.
+        ToolbarItem(placement: .trailingBar) {
+            if let model = self.model, let detail = model.detail,
+               detail.channelId != nil, self.environment.auth.state == .signedIn
+            {
                 Button {
                     Task { await model.toggleSubscription() }
                 } label: {

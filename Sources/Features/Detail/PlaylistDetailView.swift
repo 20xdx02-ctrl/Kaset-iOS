@@ -342,8 +342,9 @@ struct PlaylistDetailView: View {
     /// Library and share live in the navigation bar, like the system apps.
     @ToolbarContentBuilder
     private var detailToolbar: some ToolbarContent {
-        if let detail = self.model?.detail {
-            ToolbarItem(placement: .trailingBar) {
+        // `ToolbarContentBuilder.buildIf` is iOS 16+; keep the item and branch inside it.
+        ToolbarItem(placement: .trailingBar) {
+            if let detail = self.model?.detail {
                 Menu {
                     if detail.supportsLibraryToggle {
                         Button("Add to Library", systemImage: "plus") {

@@ -96,6 +96,23 @@ struct ContentUnavailableView: View {
     var body: some View { self.content }
 }
 
+// MARK: - Shape erasure (AnyShape is iOS 16 / macOS 13)
+
+/// Drop-in stand-in for SwiftUI's `AnyShape`, available on iOS 15 / macOS 12.
+///
+/// `Shape` only exposes `path(in:)`, so erasing the concrete shape is a one-line wrapper.
+struct AnyShapeCompat: Shape {
+    private let pathBuilder: (CGRect) -> Path
+
+    init<S: Shape>(_ shape: S) {
+        self.pathBuilder = { rect in shape.path(in: rect) }
+    }
+
+    func path(in rect: CGRect) -> Path {
+        self.pathBuilder(rect)
+    }
+}
+
 // MARK: - Navigation
 
 /// `NavigationStack` replacement for iOS 15 / macOS 12. Value-based navigation

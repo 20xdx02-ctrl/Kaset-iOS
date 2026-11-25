@@ -6,11 +6,11 @@ enum RecapPeriod: String, CaseIterable, Identifiable, Sendable {
 
     var id: String { self.rawValue }
 
-    var title: LocalizedStringResource {
+    var title: String {
         switch self {
-        case .week: "Week"
-        case .month: "Month"
-        case .year: "Year"
+        case .week: String(localized: "Week")
+        case .month: String(localized: "Month")
+        case .year: String(localized: "Year")
         }
     }
 

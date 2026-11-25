@@ -83,7 +83,9 @@ struct SettingsView: View {
                         PlayerHealthView(player: self.environment.player)
                     } label: {
                         let failing = self.environment.player.healthReport?.failing.count ?? 0
-                        LabeledContent("Player health") {
+                        HStack {
+                            Text("Player health")
+                            Spacer()
                             if failing > 0 {
                                 Text("\(failing) failing").foregroundStyle(.red)
                             }
@@ -122,7 +124,9 @@ struct SettingsView: View {
             Button {
                 Task { await watcher.checkNow(client: self.environment.client, auth: self.environment.auth) }
             } label: {
-                LabeledContent("Check now") {
+                HStack {
+                    Text("Check now")
+                    Spacer()
                     if watcher.isChecking {
                         ProgressView()
                     } else if let last = watcher.state.lastCheck {
@@ -151,11 +155,17 @@ struct SettingsView: View {
         let listening = self.environment.listening
         return Section {
             if let folder = listening.syncFolderName {
-                LabeledContent("Sync folder", value: folder)
+                HStack {
+                    Text("Sync folder")
+                    Spacer()
+                    Text(folder).foregroundStyle(.secondary)
+                }
                 Button {
                     Task { await listening.sync() }
                 } label: {
-                    LabeledContent("Sync now") {
+                    HStack {
+                        Text("Sync now")
+                        Spacer()
                         if listening.isSyncing {
                             ProgressView()
                         } else if let last = listening.lastSync {

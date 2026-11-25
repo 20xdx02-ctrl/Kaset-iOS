@@ -57,7 +57,13 @@ final class AccountRegistry: ObservableObject {
 
     static func dataStore(for id: UUID?) -> WKWebsiteDataStore {
         guard let id else { return .default() }
-        return WKWebsiteDataStore(forIdentifier: id)
+        // Per-account stores are iOS 17 / macOS 14. Older systems share the default store,
+        // which means accounts cannot hold separate sessions there.
+        if #available(iOS 17.0, macOS 14.0, *) {
+            return WKWebsiteDataStore(forIdentifier: id)
+        } else {
+            return .default()
+        }
     }
 
     func vault(for id: UUID?) -> CookieVault {
@@ -114,6 +120,7 @@ final class AccountRegistry: ObservableObject {
     /// Deletes a data store from disk. WebKit refuses while a web view still uses it, so this
     /// retries for a few seconds; anything left over is swept by `removeOrphanedDataStores`.
     static func removeDataStore(_ id: UUID) async {
+        guard #available(iOS 17.0, macOS 14.0, *) else { return }
         for attempt in 0 ..< 5 {
             if attempt > 0 { try? await Task.sleep(nanoseconds: 1000000000) }
             do {
@@ -127,6 +134,7 @@ final class AccountRegistry: ObservableObject {
 
     /// Removes stores left behind by cancelled sign-ins or interrupted removals.
     func removeOrphanedDataStores(keeping extra: Set<UUID> = []) async {
+        guard #available(iOS 17.0, macOS 14.0, *) else { return }
         let known = Set(self.accounts.map(\.id)).union(extra)
         for id in await WKWebsiteDataStore.allDataStoreIdentifiers where !known.contains(id) {
             try? await WKWebsiteDataStore.remove(forIdentifier: id)

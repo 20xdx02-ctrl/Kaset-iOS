@@ -103,7 +103,10 @@ struct NowPlayingView: View {
                     .entityDestinations()
                     .toolbar {
                         ToolbarItem(placement: .topBarLeading) {
-                            Button(role: .close) { self.artistToShow = nil }
+                            Button { self.artistToShow = nil } label: {
+                                Image(systemName: "xmark")
+                            }
+                            .accessibilityLabel("Close")
                         }
                     }
             }

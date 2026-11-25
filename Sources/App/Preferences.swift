@@ -32,7 +32,13 @@ enum ContentLanguage: String, CaseIterable, Identifiable {
 
     var apiCode: String {
         if self == .system {
-            let system = Locale.current.language.languageCode?.identifier ?? "en"
+            // `Locale.language` is iOS 16 / macOS 13; older systems use `languageCode`.
+            let system: String
+            if #available(iOS 16.0, macOS 13.0, *) {
+                system = Locale.current.language.languageCode?.identifier ?? "en"
+            } else {
+                system = Locale.current.languageCode ?? "en"
+            }
             return Self.allCases.contains { $0.rawValue == system } ? system : "en"
         }
         return self.rawValue

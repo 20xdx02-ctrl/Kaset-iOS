@@ -20,6 +20,7 @@ struct EqualizerView {
         )
     }
 
+    @available(iOS 16.0, macOS 13.0, *)
     fileprivate func size(for proposal: ProposedViewSize) -> CGSize {
         let count = CGFloat(self.barCount)
         return CGSize(
@@ -37,6 +38,7 @@ extension EqualizerView: UIViewRepresentable {
         self.update(view, environment: context.environment)
     }
 
+    @available(iOS 16.0, macOS 13.0, *)
     func sizeThatFits(_ proposal: ProposedViewSize, uiView _: EqualizerBarsView, context _: Context) -> CGSize? {
         self.size(for: proposal)
     }
@@ -49,6 +51,7 @@ extension EqualizerView: NSViewRepresentable {
         self.update(view, environment: context.environment)
     }
 
+    @available(iOS 16.0, macOS 13.0, *)
     func sizeThatFits(_ proposal: ProposedViewSize, nsView _: EqualizerBarsView, context _: Context) -> CGSize? {
         self.size(for: proposal)
     }

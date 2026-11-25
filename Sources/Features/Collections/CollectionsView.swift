@@ -58,8 +58,9 @@ struct CollectionsView: View {
             .navigationTitle("Collections")
             .entityDestinations()
             .toolbar {
-                if self.environment.auth.state == .signedIn, self.selection == .library {
-                    ToolbarItem(placement: .trailingBar) {
+                // `ToolbarContentBuilder.buildIf` is iOS 16+; keep the item and branch inside it.
+                ToolbarItem(placement: .trailingBar) {
+                    if self.environment.auth.state == .signedIn, self.selection == .library {
                         Button("New Playlist", systemImage: "plus") { self.isCreatingPlaylist = true }
                     }
                 }
