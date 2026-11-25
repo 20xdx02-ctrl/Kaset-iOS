@@ -13,6 +13,9 @@ final class AppEnvironment: ObservableObject {
     let auth: AuthStore
     let client: YTMusicClient
     let player: WebPlayer
+    /// Native AVPlayer path ported from Opaline. Used on demand for a track; it does not
+    /// load the YouTube Music site, so it is much lighter than the web player.
+    let nativePlayer = NativePlayer()
     let mixes = ArtistMixLibrary()
     let newReleases = NewReleaseWatcher()
     let listening = ListeningHistory()

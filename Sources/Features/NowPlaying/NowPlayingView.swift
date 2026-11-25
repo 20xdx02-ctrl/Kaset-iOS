@@ -21,6 +21,8 @@ struct NowPlayingView: View {
     @State private var dragOffset: CGFloat = 0
     @State private var artistToShow: Artist?
     @State private var isAddToPlaylistPresented = false
+    @State private var isNativePresented = false
+    @EnvironmentObject private var nativePlayer: NativePlayer
 
     var body: some View {
         let state = self.environment.player.state
@@ -122,6 +124,9 @@ struct NowPlayingView: View {
         .sheet(isPresented: self.$isLyricsPresented) {
             LyricsSheet(model: self.model)
         }
+        .sheet(isPresented: self.$isNativePresented) {
+            NativePlayerView(videoID: state.videoId ?? "")
+        }
     }
 
     /// Vertical gradient from the artwork's average colour, darker towards the bottom.
@@ -161,6 +166,9 @@ struct NowPlayingView: View {
                     Button("Play Next", systemImage: "text.insert") { self.environment.player.playNext(videoId: videoId) }
                     Button("Start Radio", systemImage: "dot.radiowaves.left.and.right") {
                         self.environment.player.startRadio(videoId: videoId)
+                    }
+                    Button("Play natively (experimental)", systemImage: "waveform") {
+                        self.isNativePresented = true
                     }
                     if let url = URL(string: "https://music.youtube.com/watch?v=\(videoId)") {
                         ShareButton(items: [url]) { Label("Share", systemImage: "square.and.arrow.up") }
