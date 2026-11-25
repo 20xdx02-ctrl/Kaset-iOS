@@ -6,10 +6,18 @@ on:
   pull_request:
   workflow_dispatch:
 
+# One build per branch: a new push or manual run replaces the one still queued.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-ios:
     name: Build iOS (15.0)
-    runs-on: macos-15
+    # macOS 26 (Intel) — arm64 runners (macos-15 / macos-26 / macos-latest) have a small
+    # pool and queue for a long time. The Intel image is newer than macos-15 and has
+    # more capacity, while still shipping a current Xcode able to target iOS 15.0.
+    runs-on: macos-26-intel
     steps:
       - uses: actions/checkout@v4
 
