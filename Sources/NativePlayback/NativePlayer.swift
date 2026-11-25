@@ -99,8 +99,8 @@ final class NativePlayer: ObservableObject {
         self.statusObservation = item.observe(\.status, options: [.initial, .new]) { [weak self] item, _ in
             Task { @MainActor in
                 guard let self, item == self.player?.currentItem else { return }
-                self.state.isLoading = item.status == .loading
-                if item.status == .failed {
+                self.state.isLoading = item.status == AVPlayerItem.Status.loading
+                if item.status == AVPlayerItem.Status.failed {
                     self.errorMessage = item.error?.localizedDescription ?? "Playback failed."
                 }
             }
@@ -183,7 +183,7 @@ final class NativePlayer: ObservableObject {
             MPNowPlayingInfoPropertyDefaultPlaybackRate: 1.0
         ]
         if self.state.duration > 0 {
-            info[MPNowPlayingInfoPropertyPlaybackDuration] = self.state.duration
+            info[MPMediaItemPropertyPlaybackDuration] = self.state.duration
         }
         if let artwork { info[MPMediaItemPropertyArtwork] = artwork }
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
