@@ -25,15 +25,19 @@ struct RootView: View {
             }
         }
         .background(alignment: .topLeading) {
-            WebViewHost(webView: environment.player.webView)
-                .id(environment.player.generation)
-                // An invisible page with a real viewport: at 1×1 the web app lays out as a tiny
-                // viewport and its queue/player-bar DOM is not reliably populated. iOS's desktop
-                // content mode widens a phone-sized view to a desktop viewport; macOS uses the
-                // frame as is, and below ~1000 pt YouTube Music drops its player bar.
-                .frame(width: Platform.isMac ? 1280 : 390, height: Platform.isMac ? 800 : 844)
-                .opacity(0)
-                .allowsHitTesting(false)
+            // In native mode no web document is ever loaded, so there is no reason to put a
+            // WKWebView in the window hierarchy at all.
+            if !environment.useNativePlayback {
+                WebViewHost(webView: environment.player.webView)
+                    .id(environment.player.generation)
+                    // An invisible page with a real viewport: at 1×1 the web app lays out as a tiny
+                    // viewport and its queue/player-bar DOM is not reliably populated. iOS's desktop
+                    // content mode widens a phone-sized view to a desktop viewport; macOS uses the
+                    // frame as is, and below ~1000 pt YouTube Music drops its player bar.
+                    .frame(width: Platform.isMac ? 1280 : 390, height: Platform.isMac ? 800 : 844)
+                    .opacity(0)
+                    .allowsHitTesting(false)
+            }
         }
         .task { await environment.start() }
         .task(id: environment.auth.state) {

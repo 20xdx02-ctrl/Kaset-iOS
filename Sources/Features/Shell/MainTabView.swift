@@ -34,5 +34,8 @@ struct MainTabView: View {
         .fullScreenCover(isPresented: self.$environment.isNowPlayingPresented) {
             NowPlayingView()
         }
+        .sheet(isPresented: self.$environment.isNativePlayerPresented) {
+            NativePlayerView(videoID: self.environment.nativePlayingVideoID ?? "")
+        }
     }
 }

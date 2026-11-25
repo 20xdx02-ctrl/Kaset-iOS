@@ -24,6 +24,9 @@ struct NativePlaybackState {
 final class NativePlayer: ObservableObject {
     @Published private(set) var state = NativePlaybackState()
     @Published private(set) var errorMessage: String?
+    /// Video IDs in the native queue, and the one being played.
+    @Published private(set) var queue: [String] = []
+    @Published private(set) var queueIndex = 0
 
     private var player: AVPlayer?
     private var timeObserver: Any?
@@ -71,6 +74,44 @@ final class NativePlayer: ObservableObject {
         await self.attach(stream)
     }
 
+    /// Replaces the native queue without starting playback yet.
+    func setQueue(_ ids: [String], startingAt index: Int = 0) {
+        self.queue = ids.filter { !$0.isEmpty }
+        self.queueIndex = min(max(index, 0), max(self.queue.count - 1, 0))
+    }
+
+    /// Replaces the native queue and starts at `index`. Playback never touches a WKWebView.
+    func playQueue(_ ids: [String], startingAt index: Int = 0) async {
+        self.setQueue(ids, startingAt: index)
+        await self.playCurrent()
+    }
+
+    /// Starts the current queue entry (used by the player view when a queue is already set).
+    func playCurrent() async {
+        guard let id = self.currentID else { return }
+        await self.play(videoID: id)
+    }
+
+    private var currentID: String? {
+        self.queue.indices.contains(self.queueIndex) ? self.queue[self.queueIndex] : nil
+    }
+
+    func next() {
+        self.advance(1)
+    }
+
+    func previous() {
+        self.advance(-1)
+    }
+
+    private func advance(_ delta: Int) {
+        let target = self.queueIndex + delta
+        guard self.queue.indices.contains(target) else { return }
+        let id = self.queue[target]
+        self.queueIndex = target
+        Task { await self.play(videoID: id) }
+    }
+
     private func attach(_ info: NativeStreamInfo) async {
         self.player?.pause()
         if let timeObserver, let player { player.removeTimeObserver(timeObserver) }
@@ -99,7 +140,7 @@ final class NativePlayer: ObservableObject {
         self.statusObservation = item.observe(\.status, options: [.initial, .new]) { [weak self] item, _ in
             Task { @MainActor in
                 guard let self, item == self.player?.currentItem else { return }
-                self.state.isLoading = item.status == AVPlayerItem.Status.loading
+                self.state.isLoading = item.status != AVPlayerItem.Status.readyToPlay
                 if item.status == AVPlayerItem.Status.failed {
                     self.errorMessage = item.error?.localizedDescription ?? "Playback failed."
                 }
@@ -160,6 +201,8 @@ final class NativePlayer: ObservableObject {
         Task { @MainActor in
             self.state.isPlaying = false
             self.publishNowPlaying()
+            // Auto-advance mirrors Opaline's VideoSource queue behaviour.
+            if self.queue.count > 1 { self.advance(1) }
         }
     }
 

@@ -73,16 +73,19 @@ struct NativePlayerView: View {
                 Text(error).font(.footnote).foregroundStyle(.red).multilineTextAlignment(.center)
             }
 
-            HStack(spacing: 48) {
+            HStack(spacing: 28) {
+                if self.native.queue.count > 1 {
+                    Button { self.native.previous() } label: {
+                        Image(systemName: "backward.fill").font(.system(size: 24))
+                    }
+                }
                 Button {
                     self.native.seek(to: self.native.state.position - 10)
                 } label: {
-                    Image(systemName: "gobackward.10").font(.system(size: 28))
+                    Image(systemName: "gobackward.10").font(.system(size: 26))
                 }
                 Button {
-                    if self.native.state.isLoading {
-                        return
-                    }
+                    if self.native.state.isLoading { return }
                     self.native.togglePlayPause()
                 } label: {
                     Image(systemName: self.native.state.isPlaying ? "pause.circle.fill" : "play.circle.fill")
@@ -91,7 +94,12 @@ struct NativePlayerView: View {
                 Button {
                     self.native.seek(to: self.native.state.position + 10)
                 } label: {
-                    Image(systemName: "goforward.10").font(.system(size: 28))
+                    Image(systemName: "goforward.10").font(.system(size: 26))
+                }
+                if self.native.queue.count > 1 {
+                    Button { self.native.next() } label: {
+                        Image(systemName: "forward.fill").font(.system(size: 24))
+                    }
                 }
             }
             .disabled(self.native.errorMessage != nil)
@@ -102,7 +110,11 @@ struct NativePlayerView: View {
         .task {
             guard !self.started else { return }
             self.started = true
-            await self.native.play(videoID: self.videoID)
+            if self.native.queue.isEmpty {
+                await self.native.play(videoID: self.videoID)
+            } else {
+                await self.native.playCurrent()
+            }
         }
     }
 

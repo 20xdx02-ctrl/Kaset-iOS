@@ -114,7 +114,9 @@ final class WebPlayer: NSObject, ObservableObject {
         self.observeLifecycle()
         #endif
         self.configureRemoteCommands()
-        self.webView.load(URLRequest(url: Self.homeURL))
+        // The page is loaded only when the web player is actually used. Most launches use
+        // the native (Opaline-derived) player, so booting music.youtube.com here would
+        // cost seconds of JS execution and hundreds of megabytes for nothing.
         self.restoreSavedSession()
         self.startPathMonitor()
         #if os(iOS)
@@ -123,6 +125,16 @@ final class WebPlayer: NSObject, ObservableObject {
     }
 
     // MARK: - Web view
+
+    private var didRequestPage = false
+
+    /// Loads the web app on first use. Navigation from `play` loads a watch page directly, so
+    /// the home document is only needed by the few commands that expect it to be there.
+    func ensureLoaded() {
+        guard !self.didRequestPage else { return }
+        self.didRequestPage = true
+        self.webView.load(URLRequest(url: Self.homeURL))
+    }
 
     private static func makeWebView(proxy: MessageProxy, dataStore: WKWebsiteDataStore) -> WKWebView {
         let configuration = WKWebViewConfiguration()
@@ -197,6 +209,7 @@ final class WebPlayer: NSObject, ObservableObject {
         if clearingSession {
             UserDefaults.standard.removeObject(forKey: Self.savedSessionKey)
         }
+        self.didRequestPage = true
         fresh.load(URLRequest(url: Self.homeURL))
         self.log.log("web", "reloaded (clearingSession=\(clearingSession))")
     }

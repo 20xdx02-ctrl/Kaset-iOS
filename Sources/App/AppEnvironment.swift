@@ -31,6 +31,17 @@ final class AppEnvironment: ObservableObject {
     /// Full-screen Now Playing. Lives here so any screen can open it (e.g. cover quick-play).
     @Published var isNowPlayingPresented = false
 
+    /// Native (Opaline-derived) playback is the default: it avoids booting the
+    /// music.youtube.com web app at launch. Set to false to fall back to the web player.
+    var useNativePlayback: Bool {
+        get { UserDefaults.standard.object(forKey: "playback.native") as? Bool ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: "playback.native") }
+    }
+
+    /// Video being played natively, and the sheet that hosts the native player.
+    @Published private(set) var nativePlayingVideoID: String?
+    @Published var isNativePlayerPresented = false
+
     /// Bumped after the user's library changes (playlist created, renamed, deleted) so the
     /// Library screen reloads.
     @Published var libraryRevision = 0
@@ -124,6 +135,10 @@ final class AppEnvironment: ObservableObject {
     /// Plays an entity without opening its page. Playlists use their id as the queue; an album's
     /// playable `OLAK…` id is only known from its detail, so that is fetched first.
     func playEntity(_ entity: MediaEntity, opensNowPlaying: Bool = true) {
+        if self.useNativePlayback {
+            self.playEntityNatively(entity)
+            return
+        }
         if opensNowPlaying, entity.target.isPlayableCollection { self.isNowPlayingPresented = true }
         switch entity.target {
         case let .song(videoId):
@@ -142,6 +157,38 @@ final class AppEnvironment: ObservableObject {
         case .artist, .mood, .unsupported:
             break
         }
+    }
+
+    /// Opaline-style playback: resolve streams through the Innertube `/player` request and
+    /// hand them to AVPlayer. No page scripts, no heartbeat polling, no hidden web app.
+    private func playEntityNatively(_ entity: MediaEntity) {
+        switch entity.target {
+        case let .song(videoId):
+            self.presentNative([videoId])
+        case let .playlist(id), let .album(id):
+            Task {
+                let ids = (try? await self.client.getPlaylist(id: id).detail.tracks) ?? []
+                let playable = ids.filter(\.isPlayable).map(\.videoId)
+                if playable.isEmpty {
+                    // No tracks from the API: the web player can still open the collection.
+                    self.useNativePlayback = false
+                    self.player.play(videoId: nil, playlistId: MediaEntity.watchPlaylistId(id))
+                    self.isNowPlayingPresented = true
+                } else {
+                    self.presentNative(playable, start: 0)
+                }
+            }
+        case .artist, .mood, .unsupported:
+            break
+        }
+    }
+
+    private func presentNative(_ ids: [String], start: Int = 0) {
+        guard let id = ids.indices.contains(start) ? ids[start] : ids.first else { return }
+        self.nativePlayer.setQueue(ids, startingAt: start)
+        self.nativePlayingVideoID = id
+        // The player sheet starts playback on appear, so nothing loads twice.
+        self.isNativePlayerPresented = true
     }
 
     /// Switches personal/brand identity within the active Google account: web session first,
@@ -188,7 +235,9 @@ final class AppEnvironment: ObservableObject {
             let restored = migrated
                 ? await self.auth.activate(dataStore: self.accounts.activeDataStore, vault: self.accounts.activeVault)
                 : await self.auth.restore()
-            if migrated || restored {
+            // A web reload boots the whole YouTube Music page. In native mode it is not
+            // needed for playback and would undo the launch-time optimisation.
+            if (migrated || restored) && !self.useNativePlayback {
                 self.player.reload()
             }
         }
