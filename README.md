@@ -5,153 +5,111 @@
 <h1 align="center">Kaset for iOS</h1>
 
 <p align="center">
-  A native SwiftUI YouTube Music client for iPhone, built to keep playing with the screen locked.
+  A native SwiftUI YouTube Music client for iPhone and iPad, built to play music with the screen
+  locked — without running the YouTube web app.
 </p>
 
 ---
 
-Kaset for iOS is an unofficial, open-source YouTube Music client. The interface is fully native
-(SwiftUI, Liquid Glass, iOS 26), while playback is delegated to the real YouTube Music web
-player running in a hidden web view. That gives you background playback, lock-screen and
-AirPods controls, and an Apple Music-like interface, with your own YouTube Music account.
+Kaset for iOS is an unofficial, open-source YouTube Music client. The app targets **iOS 15+** and
+plays music with a native `AVPlayer`: the YouTube Music web app is no longer used for playback. It
+gives you background playback, lock-screen and AirPods controls, queue management and an
+Apple Music-like interface with your own YouTube Music account.
 
-It is **inspired by, and adapted from, [Kaset for macOS](https://github.com/sozercan/kaset)**
-by [@sozercan](https://github.com/sozercan): the InnerTube client, response parsers, models,
-playback-bridge scripts and the app icon come from there. This project exists because the
-macOS app's player stack could not be shared with iOS as is, so the pieces that matter were
-carried over and the player was rebuilt for iOS.
+`WKWebView` is used only where a real web session is still needed: the sign-in flow and account
+switcher. It is never part of the playback path — there are no injected scripts and no hidden
+music player page running in the background.
 
-> **Disclaimer** – Not affiliated with, endorsed by, or sponsored by YouTube or Google. It uses
-> undocumented endpoints that can change at any time. Use it with your own account and at your
-> own risk.
-
-## Screenshots
-
-<table>
-  <tr>
-    <td align="center"><img src="docs/screenshots/home.png" alt="Home" width="260"></td>
-    <td align="center"><img src="docs/screenshots/discover.png" alt="Discover" width="260"></td>
-    <td align="center"><img src="docs/screenshots/now-playing.png" alt="Now Playing" width="260"></td>
-  </tr>
-  <tr>
-    <td align="center"><sub><b>Home</b><br>Shelves, tab bar and mini player (guest mode)</sub></td>
-    <td align="center"><sub><b>Discover</b><br>Explore, Charts, Moods, New</sub></td>
-    <td align="center"><sub><b>Now Playing</b><br>Artwork-tinted, Apple Music layout</sub></td>
-  </tr>
-</table>
+> **Disclaimer** — Kaset is an independent, unofficial project and is not affiliated with or
+> endorsed by YouTube or Google. You are responsible for complying with YouTube's Terms of Service
+> and local laws. Ad skipping is opt-in and may go against YouTube's terms.
 
 ## Features
 
-- **Home, Discover, Collections, Search** tabs in the Apple Music layout, with the mini player as the
-  tab bar accessory (full pill, compact inline when the bar minimizes).
-- **Discover:** Explore, Charts, Moods & genres, New.
-- **Collections:** Library (playlists, albums, artists), Liked music, History.
-- **Detail pages** for playlists, albums and artists (top songs, discography, related artists, follow, radio, shuffle).
-- **Now Playing** modelled on Apple Music: artwork-tinted background, scrubber, system volume,
-  like, lyrics, AirPlay, queue (jump to, remove, drag to reorder), shuffle and repeat.
-- **Background playback:** keeps going locked, advances through the queue, lock-screen / Control
-  Center / AirPods next-previous, native Now Playing card.
-- **Recovery:** web content termination, stuck streams and network changes bring playback back
-  to the same track and position; the last session is restored after a cold start.
-- **Account:** Google sign-in, brand-account switching, avatar in the navigation bar.
-- **Siri and Shortcuts:** play a playlist, search and play, start a radio, like the current song;
-  chain them with Shazam's *Recognise Music* or a Clock alarm. Visual Intelligence results on
-  Apple Intelligence iPhones.
-- **Settings:** audio quality, content language, haptics, optional ad skipping (off by default).
-- **Localized** in English and French.
+- Native `AVPlayer` playback, including background audio and remote controls.
+- Native shell with a bottom tab bar: **Home · Discover · Collections · Search**; the mini player
+  sits above the tabs and expands into the full Now Playing screen.
+- Now Playing metadata, artwork and playback controls on the lock screen and in Control Center,
+  with the queue showing track names, artists and cover art.
+- Settings for streaming quality (`Auto`, `Low`, `Normal`, `High`), extra buffering, adaptive
+  quality and "skip ads". The quality preference selects a cheaper progressive stream on slow
+  links; "skip ads" only affects app behaviour — it does not remove ads from YouTube itself.
+- Covers are requested at `mqdefault` (320×180) on cards and shelves, decoded down to 480 px and
+  cached in memory and on disk. Prefetching keeps scrolling smooth on older devices.
+- Session restore: you stay signed in across launches, and a new bundle can be installed over the
+  existing app without losing its data.
+- English and French localisation.
 
 ## How it works
 
-```
- SwiftUI screens ──commands──▶ WebPlayer ──JS──▶ music.youtube.com (hidden web view)
-        ▲                          │                         │
-        └────── PlaybackState ◀────┴──── page events ◀───────┘
-```
+`NativeStreamResolver` performs an anonymous Innertube (`ANDROID` client) player request and
+returns a single playable stream URL plus the metadata needed by `AVPlayer` and
+`MPNowPlayingInfoCenter`. `KasetPlayer` owns the player, queue, lock-screen info and remote command
+handlers (`MPRemoteCommandCenter` with an active `.playback` audio session). UI state is throttled:
+position ticks update the system now-playing card but do not re-render the whole SwiftUI view tree.
 
-- The **web view is the single source of truth** for playback and the queue. The native UI never
-  keeps its own player state: taps send commands to the page, and what is drawn is the
-  `PlaybackState` mirrored from the page's events and heartbeat.
-- **Everything else goes through the InnerTube API** (Home, Search, browse pages, library, ratings),
-  authenticated like the web client: Google cookies archived in the Keychain and `SAPISIDHASH`
-  request signing.
-
-```
-Sources/
-  App/        entry point, environment, preferences, localization, assets
-  Auth/       cookie archive (Keychain), login, SAPISIDHASH, account switching
-  Core/       InnerTube client, models, parsers (adapted from Kaset macOS)
-  Playback/   WebPlayer, page scripts, state, Now Playing, audio session
-  Features/   Home, Discover, Collections, Search, Detail, Now Playing, Settings, Shell
-  Debug/      log and diagnostic screens
-Tests/        parsers (sanitized fixtures), auth, playback state
-docs/         screenshots, spike findings
-```
-
-See [`docs/spike-findings.md`](docs/spike-findings.md) for the evidence behind the playback
-approach (background playback, keep-alive, lock-screen controls).
+The YouTube Music web view survives only in `Sources/Auth/LoginView.swift` and
+`Sources/Auth/AccountSwitcher.swift`, where cookies from a real sign-in are required.
 
 ## Requirements
 
-- Xcode 26 and an iOS 26 device (iPhone first)
-- [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`)
-- A YouTube Music account (Premium is not required)
+- iOS 15 or later (iPhone and iPad).
+- A YouTube Music account for signing in.
 
-## Build and run
+The repository still carries the macOS target for reference, but development is iOS-first: new
+code must compile for iOS 15, and macOS compatibility is not a constraint for new features.
+
+## Build
+
+The project is generated with [XcodeGen](https://github.com/yonaskolb/XcodeGen), and the GitHub
+Actions workflow builds an unsigned iOS IPA on every push and pull request to `main`:
 
 ```bash
-git clone https://github.com/emoonadev/Kaset-iOS.git
-cd Kaset-iOS
+brew install xcodegen
 xcodegen generate
 open KasetiOS.xcodeproj
 ```
 
-Select your team under **Signing & Capabilities**, choose your iPhone, and run.
+The built IPA is uploaded as the `KasetiOS-unsigned` artifact. No manual `workflow_dispatch` run
+is needed after a push — the automatic build already produces the artifact.
 
-### Sideloading with a free Apple ID
+## Install / update on a jailbroken iPad
 
-The app is meant to be sideloaded, not distributed through the App Store:
+Copy the app bundle from the IPA over the existing bundle, leaving the application's data
+container untouched (settings, login session and logs stay in place):
 
-- A **free Apple ID** works, but the provisioning profile expires after **7 days** and you can
-  have a limited number of apps and App IDs; re-run from Xcode to renew it.
-- A paid developer account lifts these limits (profiles last a year).
-- Change the bundle identifier (`dev.emoona.kaset` in `project.yml`) to one you own.
-- Background audio uses the standard `audio` background mode; no special entitlement is needed.
-- CarPlay needs an entitlement that sideloaded builds cannot have, so it is not supported.
+1. Unzip the artifact and extract `Payload/KasetiOS.app`.
+2. Stop the running app, replace only the contents of the existing
+   `/var/containers/Bundle/Application/<UUID>/KasetiOS.app` directory, then re-sign the bundle
+   (`ldid -S` on the app directory).
+3. Relaunch with `uiopen dev.emoona.kaset`.
 
-### Tests
+Do **not** delete the `/var/mobile/Containers/Data/Application/<UUID>` directory: that is where the
+app keeps its data. Copying only the bundle updates the app without logging you out.
 
-```bash
-xcodebuild test \
-  -project KasetiOS.xcodeproj -scheme KasetiOS \
-  -destination 'platform=iOS Simulator,name=iPhone 17'
-```
+## Development notes
 
-Parser tests run against sanitized fixtures. Never commit cookies, tokens or captured
-personal responses; fixtures use placeholders only.
-
-See the [roadmap](ROADMAP.md) for what is planned next.
-
-## Known limitations
-
-- Playback depends on selectors and behaviour of the YouTube Music web page. Shuffle/repeat
-  state, queue jump/remove and "add to queue" are best effort and can break when the page changes.
-- Queue reordering works by rewriting the affected part of the queue through the page's own menus (the page has no reorder primitive), so moving an entry far down the queue is slow.
-- Podcasts, video mode, scrobbling and AI features of the macOS app are out of scope for v1.
-- Ad skipping is opt-in and may go against YouTube's terms of service.
+- `swiftc -parse` over `Sources/**/*.swift` is a quick syntax check; CI performs the real build.
+- `docs/spike-findings.md` records the earlier WebView-player experiment and why it was replaced
+  by native playback.
+- Keep network calls anonymous and avoid logging cookies, tokens or full API responses.
+- New playback code should not introduce another `WKWebView`; the web view is limited to auth.
 
 ## Contributing
 
-Issues and pull requests are welcome. A few ground rules: verify an endpoint against the real
-service (or Kaset's `api-explorer`) before writing a parser, keep the web view as the source of
-truth for playback, and never put cookies, tokens or personal responses in code, logs or fixtures.
+Issues and pull requests are welcome. Before changing an endpoint parser, verify it against the
+real service; keep playback native; never commit cookies, tokens or personal responses.
 
 ## Acknowledgements
 
-- [**Kaset for macOS**](https://github.com/sozercan/kaset) by Sertaç Özercan – the project this
-  one is inspired by and adapted from. Thank you.
+- [**Kaset for macOS**](https://github.com/sozercan/kaset) by Sertaç Özercan — the InnerTube
+  client, parsers, models and app icon come from this project (MIT).
+- [**Opaline**](https://github.com/verback2308/Opaline) — parts of the native stream resolver and
+  player are adapted from its GPL-3.0 code; see the headers in
+  `Sources/NativePlayback/NativeStreamResolver.swift` and `Sources/Playback/KasetPlayer.swift`.
 - [XcodeGen](https://github.com/yonaskolb/XcodeGen).
 
 ## License
 
 [MIT](LICENSE). Portions adapted from Kaset for macOS are covered by its MIT license, reproduced
-in the same file.
+in the same file. The Opaline-derived files remain under GPL-3.0 as noted in their headers.
