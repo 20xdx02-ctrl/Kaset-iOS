@@ -255,7 +255,7 @@ final class KasetPlayer: ObservableObject {
         var elapsed = self.nativeState.position
         if let override = positionOverride {
             elapsed = override
-        } else if let time = self.player?.currentTime(), time.isValid, time.isFinite {
+        } else if let time = self.player?.currentTime(), time.isValid, time.isNumeric {
             elapsed = time.seconds
         }
         var info: [String: Any] = [
@@ -299,7 +299,7 @@ final class KasetPlayer: ObservableObject {
         // Read the AVPlayer clock here so a pause/seek is accurate even between 1 Hz ticks.
         if let override = positionOverride {
             next.position = override
-        } else if let time = self.player?.currentTime(), time.isValid, time.isFinite {
+        } else if let time = self.player?.currentTime(), time.isValid, time.isNumeric {
             next.position = time.seconds
         } else {
             next.position = self.nativeState.position
