@@ -409,21 +409,21 @@ struct PlaylistDetailView: View {
 
     private func playAll(model: PlaylistDetailModel, shuffled: Bool) {
         let player = self.environment.player
-        let first = model.tracks.first(where: \.isPlayable)?.videoId
+        let first = model.tracks.first(where: \.isPlayable)
         if let list = model.watchListId {
             if shuffled {
                 player.playShuffled(videoId: nil, playlistId: list)
-            } else {
-                player.play(videoId: first, playlistId: list)
+            } else if let first {
+                player.play(song: first, playlistId: list)
             }
         } else if let first {
-            player.play(videoId: first, playlistId: "RDAMVM\(first)")
+            player.play(song: first, playlistId: "RDAMVM\(first.videoId)")
         }
     }
 
     private func play(_ song: Song, model: PlaylistDetailModel) {
         let list = model.watchListId ?? "RDAMVM\(song.videoId)"
-        self.environment.player.play(videoId: song.videoId, playlistId: list)
+        self.environment.player.play(song: song, playlistId: list)
     }
 }
 

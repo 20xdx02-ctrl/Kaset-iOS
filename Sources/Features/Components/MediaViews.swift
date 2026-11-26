@@ -33,7 +33,7 @@ struct MediaCard: View {
                         RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(.primary.opacity(0.08))
                     }
                 }
-                .shadow(color: .black.opacity(0.12), radius: 6, y: 3)
+                // A shadow on every grid cell forces an offscreen pass per row while scrolling.
                 .overlay(alignment: .bottomTrailing) { self.quickPlay }
                 .overlay(alignment: .topLeading) { self.nowPlayingBadge }
             Text(self.entity.title)
@@ -111,7 +111,7 @@ struct MediaRow: View {
     }
 }
 
-/// Wraps content so a tap and the long-press menu send commands to the web player.
+/// Wraps content so a tap and the long-press menu send commands to the native player.
 /// Songs and playlists play; albums and artists open their detail screen (K8).
 struct MediaActions<Content: View>: View {
     @EnvironmentObject private var environment: AppEnvironment
@@ -164,6 +164,12 @@ struct MediaActions<Content: View>: View {
         let player = self.environment.player
         switch self.entity.target {
         case let .song(videoId):
+            player.setQueue(
+                [videoId],
+                metadata: [videoId: QueueTrackMetadata(
+                    title: self.entity.title, artist: self.entity.subtitle ?? "", artworkURL: self.entity.thumbnailURL
+                )]
+            )
             player.play(videoId: videoId, playlistId: "RDAMVM\(videoId)")
         default:
             self.environment.playEntity(self.entity)
@@ -175,9 +181,17 @@ struct MediaActions<Content: View>: View {
         Button("Play", systemImage: "play.fill", action: self.play)
         if let videoId = self.entity.videoId {
             Button("Play Next", systemImage: "text.insert") {
+                self.environment.player.setQueueMetadata(
+                    videoID: videoId, title: self.entity.title,
+                    artist: self.entity.subtitle ?? "", artworkURL: self.entity.thumbnailURL
+                )
                 self.environment.player.playNext(videoId: videoId)
             }
             Button("Add to Queue", systemImage: "text.append") {
+                self.environment.player.setQueueMetadata(
+                    videoID: videoId, title: self.entity.title,
+                    artist: self.entity.subtitle ?? "", artworkURL: self.entity.thumbnailURL
+                )
                 self.environment.player.addToQueue(videoId: videoId)
             }
             Button("Start Radio", systemImage: "dot.radiowaves.left.and.right") {

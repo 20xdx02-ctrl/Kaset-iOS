@@ -123,17 +123,30 @@ final class AppEnvironment: ObservableObject {
     func playEntity(_ entity: MediaEntity, opensNowPlaying: Bool = true) {
         switch entity.target {
         case let .song(videoId):
-            self.player.setQueue([videoId])
+            self.player.setQueue(
+                [videoId],
+                metadata: [videoId: QueueTrackMetadata(
+                    title: entity.title, artist: entity.subtitle ?? "", artworkURL: entity.thumbnailURL
+                )]
+            )
             self.isNowPlayingPresented = true
             Task { await self.player.play(videoID: videoId) }
         case let .playlist(id), let .album(id):
             Task {
                 let tracks = (try? await self.client.getPlaylist(id: id).detail.tracks) ?? []
-                let ids = tracks.filter(\.isPlayable).map(\.videoId)
+                let playable = tracks.filter(\.isPlayable)
+                let ids = playable.map(\.videoId)
                 guard !ids.isEmpty else { return }
-                self.player.setQueue(ids)
+                // Queue rows should show song names, not video ids, even before each track is
+                // resolved by the native stream resolver.
+                var metadata: [String: QueueTrackMetadata] = [:]
+                for track in playable {
+                    metadata[track.videoId] = QueueTrackMetadata(
+                        title: track.title, artist: track.artistsDisplay, artworkURL: track.thumbnailURL
+                    )
+                }
                 self.isNowPlayingPresented = true
-                await self.player.playQueue(ids)
+                await self.player.playQueue(ids, metadata: metadata)
             }
         case .artist, .mood, .unsupported:
             break

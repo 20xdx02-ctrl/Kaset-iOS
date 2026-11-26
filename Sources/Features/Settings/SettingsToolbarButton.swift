@@ -42,16 +42,9 @@ private struct SettingsSheetButton: View {
     private var label: some View {
         Group {
             if let url = self.environment.accountAvatarURL {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case let .success(image):
-                        image.resizable().scaledToFill()
-                    default:
-                        Image(systemName: "person.crop.circle.fill").resizable().foregroundStyle(.secondary)
-                    }
-                }
-                .frame(width: 30, height: 30)
-                .clipShape(Circle())
+                ArtworkView(url: url, placeholder: "person.crop.circle.fill")
+                    .frame(width: 30, height: 30)
+                    .clipShape(Circle())
             } else {
                 Image(systemName: "person.crop.circle")
             }

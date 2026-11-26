@@ -319,15 +319,9 @@ private struct AccountRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            AsyncImage(url: self.account.avatarURL) { phase in
-                if case let .success(image) = phase {
-                    image.resizable().scaledToFill()
-                } else {
-                    Image(systemName: "person.crop.circle.fill").resizable().foregroundStyle(.secondary)
-                }
-            }
-            .frame(width: 32, height: 32)
-            .clipShape(Circle())
+            ArtworkView(url: self.account.avatarURL, placeholder: "person.crop.circle.fill")
+                .frame(width: 32, height: 32)
+                .clipShape(Circle())
             VStack(alignment: .leading) {
                 Text(self.account.name ?? String(localized: "Google account"))
                 if self.isExpired {

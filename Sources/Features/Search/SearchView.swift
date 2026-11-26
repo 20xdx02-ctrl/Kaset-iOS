@@ -353,7 +353,7 @@ struct SearchContent: View {
         switch item {
         case let .song(song), let .video(song):
             TrackRow(song: song) {
-                self.environment.player.play(videoId: song.videoId, playlistId: "RDAMVM\(song.videoId)")
+                self.environment.player.play(song: song, playlistId: "RDAMVM\(song.videoId)")
             }
         default:
             let entity = MediaEntity(item)

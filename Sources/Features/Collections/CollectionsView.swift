@@ -303,7 +303,7 @@ struct LikedMusicView: View {
                     } else {
                         List(model.songs) { song in
                             TrackRow(song: song) {
-                                self.environment.player.play(videoId: song.videoId, playlistId: LikedMusicPlaylist.id)
+                                self.environment.player.play(song: song, playlistId: LikedMusicPlaylist.id)
                             }
                             .task { await model.loadMoreIfNeeded(after: song) }
                         }

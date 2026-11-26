@@ -8,6 +8,13 @@ import Combine
 import MediaPlayer
 import SwiftUI
 
+/// What the queue row needs to show instead of a bare video id.
+struct QueueTrackMetadata {
+    let title: String
+    let artist: String
+    let artworkURL: URL?
+}
+
 struct NativePlaybackState {
     var videoID: String?
     var title: String?
@@ -57,6 +64,9 @@ final class KasetPlayer: ObservableObject {
     /// Avoid rebuilding the `PlaybackState.queue` array when only playback state changed.
     private var facadeQueueIDs: [String] = []
     private var facadeQueueIndex = -1
+    private var facadeQueueNeedsRefresh = true
+    /// Track names for queue rows. Filled from the browse API and from stream metadata.
+    private var queueMetadata: [String: QueueTrackMetadata] = [:]
 
     init() {
         NotificationCenter.default.addObserver(
@@ -100,15 +110,32 @@ final class KasetPlayer: ObservableObject {
         await self.attach(stream)
     }
 
+    /// Track names for the queue. Callers with a playlist response pass all of its songs;
+    /// the stream resolver fills in anything still missing when a track starts.
+    func setQueueMetadata(_ metadata: [String: QueueTrackMetadata]) {
+        guard !metadata.isEmpty else { return }
+        self.queueMetadata.merge(metadata) { _, newer in newer }
+        self.facadeQueueNeedsRefresh = true
+        self.syncFacade()
+    }
+
+    func setQueueMetadata(videoID: String, title: String, artist: String = "", artworkURL: URL? = nil) {
+        self.setQueueMetadata([videoID: QueueTrackMetadata(title: title, artist: artist, artworkURL: artworkURL)])
+    }
+
     /// Replaces the native queue without starting playback yet.
-    func setQueue(_ ids: [String], startingAt index: Int = 0) {
+    func setQueue(_ ids: [String], startingAt index: Int = 0, metadata: [String: QueueTrackMetadata] = [:]) {
         self.queue = ids.filter { !$0.isEmpty }
         self.queueIndex = min(max(index, 0), max(self.queue.count - 1, 0))
+        if !metadata.isEmpty {
+            self.queueMetadata.merge(metadata) { _, newer in newer }
+        }
+        self.facadeQueueNeedsRefresh = true
     }
 
     /// Replaces the native queue and starts at `index`. Playback never touches a WKWebView.
-    func playQueue(_ ids: [String], startingAt index: Int = 0) async {
-        self.setQueue(ids, startingAt: index)
+    func playQueue(_ ids: [String], startingAt index: Int = 0, metadata: [String: QueueTrackMetadata] = [:]) async {
+        self.setQueue(ids, startingAt: index, metadata: metadata)
         await self.playCurrent()
     }
 
@@ -160,6 +187,12 @@ final class KasetPlayer: ObservableObject {
             isLoading: true,
             qualityLabel: info.qualityLabel
         )
+        if !info.title.isEmpty {
+            self.queueMetadata[info.videoID] = QueueTrackMetadata(
+                title: info.title, artist: info.author, artworkURL: info.artworkURL
+            )
+            self.facadeQueueNeedsRefresh = true
+        }
         self.loadArtwork(info.artworkURL)
         self.configureAudioSession()
 
@@ -277,10 +310,9 @@ final class KasetPlayer: ObservableObject {
         self.artwork = nil
         guard let url else { return }
         self.artworkTask = Task { [weak self] in
-            guard let (data, _) = try? await URLSession.shared.data(from: url),
-                  let image = PlatformImage(data: data)
-            else { return }
-            guard let self else { return }
+            // Reuse the decoded cover already shown in the UI instead of fetching it again.
+            let image = await ArtworkCache.shared.image(for: url)
+            guard let self, let image else { return }
             self.artwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
             self.publishNowPlaying(syncState: false)
         }
@@ -308,15 +340,19 @@ final class KasetPlayer: ObservableObject {
         next.hasMedia = self.nativeState.videoID != nil
         next.canGoNext = self.queueIndex < self.queue.count - 1
         next.canGoPrevious = self.queueIndex > 0
-        if self.queue != self.facadeQueueIDs || self.queueIndex != self.facadeQueueIndex {
+        if self.facadeQueueNeedsRefresh || self.queue != self.facadeQueueIDs || self.queueIndex != self.facadeQueueIndex {
             next.queue = self.queue.enumerated().map { index, id in
-                PlaybackState.QueueEntry(
-                    index: index, videoId: id, title: id, artist: "",
+                let metadata = self.queueMetadata[id]
+                return PlaybackState.QueueEntry(
+                    index: index, videoId: id,
+                    title: metadata?.title ?? id,
+                    artist: metadata?.artist ?? "",
                     isCurrent: index == self.queueIndex
                 )
             }
             self.facadeQueueIDs = self.queue
             self.facadeQueueIndex = self.queueIndex
+            self.facadeQueueNeedsRefresh = false
         } else {
             next.queue = self.state.queue
         }
@@ -335,7 +371,23 @@ final class KasetPlayer: ObservableObject {
     /// resolver needs only the video id.
     func play(videoId: String?, playlistId: String? = nil) {
         guard let videoId else { return }
+        if let index = self.queue.firstIndex(of: videoId) {
+            self.queueIndex = index
+            self.facadeQueueNeedsRefresh = true
+        } else {
+            // A song started from a row still needs a queue with a named current entry.
+            self.setQueue([videoId])
+        }
         Task { await self.play(videoID: videoId) }
+    }
+
+    /// Same as above, but the queue row can show the real title before the stream resolves.
+    func play(song: Song, playlistId: String? = nil) {
+        self.setQueueMetadata(
+            videoID: song.videoId, title: song.title,
+            artist: song.artistsDisplay, artworkURL: song.thumbnailURL
+        )
+        self.play(videoId: song.videoId, playlistId: playlistId)
     }
 
     func playShuffled(videoId: String?, playlistId: String) {
@@ -351,7 +403,8 @@ final class KasetPlayer: ObservableObject {
         let index = min(self.queueIndex + 1, self.queue.count)
         self.queue.insert(videoId, at: index)
         self.lastQueueResult = (videoId, true, "queued next")
-        self.showNotice("Added next: \(videoId)")
+        self.showNotice("Added next: \(self.queueMetadata[videoId]?.title ?? videoId)")
+        self.facadeQueueNeedsRefresh = true
         self.syncFacade()
         return true
     }
@@ -359,7 +412,8 @@ final class KasetPlayer: ObservableObject {
     func addToQueue(videoId: String) -> Bool {
         self.queue.append(videoId)
         self.lastQueueResult = (videoId, true, "queued")
-        self.showNotice("Added to queue: \(videoId)")
+        self.showNotice("Added to queue: \(self.queueMetadata[videoId]?.title ?? videoId)")
+        self.facadeQueueNeedsRefresh = true
         self.syncFacade()
         return true
     }

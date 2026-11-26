@@ -249,7 +249,7 @@ struct ArtistDetailView: View {
                 ) {
                     ForEach(detail.songs.prefix(Platform.isMac ? 6 : 5)) { song in
                         TrackRow(song: song) {
-                            self.environment.player.play(videoId: song.videoId, playlistId: "RDAMVM\(song.videoId)")
+                            self.environment.player.play(song: song, playlistId: "RDAMVM\(song.videoId)")
                         }
                     }
                 }
@@ -311,7 +311,7 @@ struct ArtistSongsView: View {
             case .loaded:
                 List(self.songs) { song in
                     TrackRow(song: song) {
-                        self.environment.player.play(videoId: song.videoId, playlistId: "RDAMVM\(song.videoId)")
+                        self.environment.player.play(song: song, playlistId: "RDAMVM\(song.videoId)")
                     }
                 }
                 .listStyle(.plain)
