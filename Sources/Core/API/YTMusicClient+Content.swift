@@ -185,6 +185,19 @@ extension YTMusicClient {
         return try SongMetadataParser.parse(data, videoId: videoId)
     }
 
+    /// The "Up next" panel YouTube Music shows for a song. The native player uses it to
+    /// continue with related music instead of stopping after the last explicit queue entry.
+    func getWatchQueue(videoId: String) async throws -> [SongMetadataParser.WatchQueueTrack] {
+        let body: [String: Any] = [
+            "videoId": videoId,
+            "enablePersistentPlaylistPanel": true,
+            "isAudioOnly": true,
+            "tunerSettingValue": "AUTOMIX_SETTING_NORMAL",
+        ]
+        let data = try await self.request("next", body: body, ttl: APICache.TTL.songMetadata)
+        return SongMetadataParser.parseWatchQueue(data)
+    }
+
     /// Timed lyrics when the `next` response carries them (kaset `getTimedLyrics`), otherwise
     /// the plain lyrics behind the lyrics tab.
     func getLyrics(videoId: String) async throws -> LyricResult {

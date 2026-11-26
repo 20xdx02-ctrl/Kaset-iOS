@@ -15,6 +15,12 @@ struct QueueTrackMetadata {
     let artworkURL: URL?
 }
 
+/// One suggested track from YouTube Music's "Up next" panel.
+struct QueueRecommendation {
+    let videoId: String
+    let metadata: QueueTrackMetadata
+}
+
 struct NativePlaybackState {
     var videoID: String?
     var title: String?
@@ -46,6 +52,9 @@ final class KasetPlayer: ObservableObject {
     @Published private(set) var pageURL: String?
     /// Listening history hook (same shape as the old web player).
     var onStateChange: ((PlaybackState, Date) -> Void)?
+    /// Supplies YouTube Music's own recommendations for a song. Injected by `AppEnvironment`
+    /// so the player does not depend on the API client (and no web view is ever involved).
+    var recommendationsProvider: ((String) async -> [QueueRecommendation])?
 
     /// Kept for the sign-in web view (the only WebKit user left in the app).
     static let desktopUserAgent =
@@ -59,6 +68,7 @@ final class KasetPlayer: ObservableObject {
     private var statusObservation: NSKeyValueObservation?
     private var playheadObservation: NSKeyValueObservation?
     private var loadTask: Task<Void, Never>?
+    private var autoQueueTask: Task<Void, Never>?
     private var artworkTask: Task<Void, Never>?
     private var artwork: MPMediaItemArtwork?
     /// Avoid rebuilding the `PlaybackState.queue` array when only playback state changed.
@@ -67,6 +77,9 @@ final class KasetPlayer: ObservableObject {
     private var facadeQueueNeedsRefresh = true
     /// Track names for queue rows. Filled from the browse API and from stream metadata.
     private var queueMetadata: [String: QueueTrackMetadata] = [:]
+    /// A single song / radio takes recommendations right after the playing track. An album or
+    /// playlist keeps its own order and only gets a recommended tail at the end.
+    private var queueIsRadio = false
     /// The command center does not retain its targets; keep them for the app's lifetime.
     private var remoteCommandTargets: [Any] = []
 
@@ -164,6 +177,7 @@ final class KasetPlayer: ObservableObject {
     /// Replaces the native queue without starting playback yet.
     func setQueue(_ ids: [String], startingAt index: Int = 0, metadata: [String: QueueTrackMetadata] = [:]) {
         self.queue = ids.filter { !$0.isEmpty }
+        self.queueIsRadio = self.queue.count <= 1
         self.queueIndex = min(max(index, 0), max(self.queue.count - 1, 0))
         if !metadata.isEmpty {
             self.queueMetadata.merge(metadata) { _, newer in newer }
@@ -233,6 +247,12 @@ final class KasetPlayer: ObservableObject {
         }
         self.loadArtwork(info.artworkURL)
         self.configureAudioSession()
+        // YouTube Music keeps playing related songs after a single track. Radio queues get
+        // their recommendations immediately after the current song; explicit playlists keep
+        // their order and only take a recommended tail near the end.
+        if self.queueIsRadio || self.queueIndex >= self.queue.count - 2 {
+            self.scheduleAutoQueue(for: info.videoID)
+        }
 
         self.statusObservation = item.observe(\.status, options: [.initial, .new]) { [weak self] item, _ in
             Task { @MainActor in
@@ -294,6 +314,7 @@ final class KasetPlayer: ObservableObject {
 
     func stop() {
         self.loadTask?.cancel()
+        self.autoQueueTask?.cancel()
         self.player?.pause()
         self.player = nil
         self.nativeState = NativePlaybackState()
@@ -305,9 +326,39 @@ final class KasetPlayer: ObservableObject {
         Task { @MainActor in
             self.nativeState.isPlaying = false
             self.publishNowPlaying()
-            // Auto-advance mirrors Opaline's VideoSource queue behaviour.
+            // Never stop at the end of an explicit queue: fetch the same recommendations
+            // YouTube Music would use and continue, then advance.
+            if self.queueIndex >= self.queue.count - 1, let id = self.nativeState.videoID {
+                await self.extendQueue(for: id)
+            }
             if self.queue.count > 1 { self.advance(1) }
         }
+    }
+
+    // MARK: - Auto queue
+
+    private func scheduleAutoQueue(for videoID: String) {
+        self.autoQueueTask?.cancel()
+        self.autoQueueTask = Task { [weak self] in
+            await self?.extendQueue(for: videoID)
+        }
+    }
+
+    /// Reads YouTube Music's "Up next" panel for `videoID` and appends the new tracks after
+    /// the current queue. Called from a background task, so it never delays playback.
+    private func extendQueue(for videoID: String) async {
+        guard let provider = self.recommendationsProvider, !videoID.isEmpty else { return }
+        let suggestions = await provider(videoID)
+        guard !Task.isCancelled, !suggestions.isEmpty else { return }
+        let known = Set(self.queue)
+        let additions = suggestions.filter { !known.contains($0.videoId) }
+        guard !additions.isEmpty else { return }
+        self.queue.append(contentsOf: additions.map(\.videoId))
+        for item in additions {
+            self.queueMetadata[item.videoId] = item.metadata
+        }
+        self.facadeQueueNeedsRefresh = true
+        self.syncFacade()
     }
 
     // MARK: - System integration

@@ -33,19 +33,26 @@ private enum ArtworkHTTP {
 /// middle of a scroll. On an A8-class iPad that is one dropped frame per newly visible cover.
 private func decodedArtwork(_ image: PlatformImage, maxPixelSize: CGFloat) -> PlatformImage {
     #if os(iOS)
-    let longestSide = max(image.size.width, image.size.height)
-    guard longestSide > 0 else { return image }
-    let scale = min(1, maxPixelSize / longestSide)
-    let size = CGSize(
-        width: max(floor(image.size.width * scale), 1),
-        height: max(floor(image.size.height * scale), 1)
-    )
+    let width = image.size.width
+    let height = image.size.height
+    guard width > 0, height > 0 else { return image }
+    // YouTube serves 16:9 thumbnails for videos and music-video entries. Every artwork
+    // surface in the app is square, so centre-crop here, once, off the main thread, instead
+    // of letting SwiftUI scale a wide bitmap into a square on every scroll frame.
+    let side = min(width, height)
+    let scale = min(1, maxPixelSize / max(width, height))
+    let output = max(floor(side * scale), 1)
     let format = UIGraphicsImageRendererFormat.default()
     format.opaque = false
     // `image.size` already holds pixels; avoid multiplying the bitmap by the screen scale again.
     format.scale = 1
-    return UIGraphicsImageRenderer(size: size, format: format).image { _ in
-        image.draw(in: CGRect(origin: .zero, size: size))
+    return UIGraphicsImageRenderer(size: CGSize(width: output, height: output), format: format).image { _ in
+        let offsetX = -(width - side) * 0.5 * scale
+        let offsetY = -(height - side) * 0.5 * scale
+        image.draw(in: CGRect(
+            x: offsetX, y: offsetY,
+            width: width * scale, height: height * scale
+        ))
     }
     #else
     return image

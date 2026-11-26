@@ -98,6 +98,19 @@ final class AppEnvironment: ObservableObject {
         self.client.brandIdProvider = { accounts.active?.brandId }
         let listening = self.listening
         self.player.onStateChange = { state, date in listening.playbackChanged(state, at: date) }
+        // Native auto queue: YouTube Music's own "Up next" panel, parsed by the shared API
+        // client. Kept as a closure so the player stays independent of networking.
+        self.player.recommendationsProvider = { videoId in
+            guard let tracks = try? await client.getWatchQueue(videoId: videoId) else { return [] }
+            return tracks.map { track in
+                QueueRecommendation(
+                    videoId: track.videoId,
+                    metadata: QueueTrackMetadata(
+                        title: track.title, artist: track.artist, artworkURL: track.artworkURL
+                    )
+                )
+            }
+        }
 
         // With Observation (iOS 17) a view reading `environment.player.state` was invalidated by
         // the nested object automatically. ObservableObject does not do that, so forward every

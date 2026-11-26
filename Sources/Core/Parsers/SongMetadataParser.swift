@@ -43,9 +43,35 @@ enum SongMetadataParser {
         )
     }
 
-    /// Extracts the playlistPanelVideoRenderer from the next endpoint response.
-    /// Handles both direct and wrapped renderer structures.
-    static func extractPanelVideoRenderer(from data: [String: Any], videoId: String) throws -> [String: Any] {
+    /// A track from the watch-next panel. These are the songs YouTube Music itself puts in
+    /// "Up next" for the current track, used to build the native auto queue.
+    struct WatchQueueTrack {
+        let videoId: String
+        let title: String
+        let artist: String
+        let artworkURL: URL?
+    }
+
+    /// All rows of the watch-next playlist panel, including the recommendations after the
+    /// playing song. The same panel is what `parse(_:videoId:)` reads for the first row.
+    static func parseWatchQueue(_ data: [String: Any]) -> [WatchQueueTrack] {
+        guard let contents = playlistPanelContents(from: data) else { return [] }
+        return contents.compactMap { item in
+            guard let renderer = panelVideoRenderer(in: item),
+                  let videoId = renderer["videoId"] as? String
+            else { return nil }
+            let title = self.parseTitle(from: renderer)
+            guard !title.isEmpty, title != "Unknown" else { return nil }
+            return WatchQueueTrack(
+                videoId: videoId,
+                title: title,
+                artist: self.bylineText(from: renderer),
+                artworkURL: self.parseThumbnail(from: renderer)
+            )
+        }
+    }
+
+    private static func playlistPanelContents(from data: [String: Any]) -> [[String: Any]]? {
         guard let contents = data["contents"] as? [String: Any],
               let watchNextRenderer = contents["singleColumnMusicWatchNextResultsRenderer"] as? [String: Any],
               let tabbedRenderer = watchNextRenderer["tabbedRenderer"] as? [String: Any],
@@ -57,25 +83,42 @@ enum SongMetadataParser {
               let musicQueueRenderer = tabContent["musicQueueRenderer"] as? [String: Any],
               let queueContent = musicQueueRenderer["content"] as? [String: Any],
               let playlistPanelRenderer = queueContent["playlistPanelRenderer"] as? [String: Any],
-              let playlistContents = playlistPanelRenderer["contents"] as? [[String: Any]],
-              let firstItem = playlistContents.first
+              let playlistContents = playlistPanelRenderer["contents"] as? [[String: Any]]
+        else { return nil }
+        return playlistContents
+    }
+
+    /// Direct `playlistPanelVideoRenderer` or the wrapped variant used for some songs.
+    private static func panelVideoRenderer(in item: [String: Any]) -> [String: Any]? {
+        if let direct = item["playlistPanelVideoRenderer"] as? [String: Any] { return direct }
+        if let wrapper = item["playlistPanelVideoWrapperRenderer"] as? [String: Any],
+           let primary = wrapper["primaryRenderer"] as? [String: Any],
+           let wrapped = primary["playlistPanelVideoRenderer"] as? [String: Any]
+        { return wrapped }
+        return nil
+    }
+
+    private static func bylineText(from renderer: [String: Any]) -> String {
+        for key in ["shortBylineText", "longBylineText"] {
+            guard let text = renderer[key] as? [String: Any],
+                  let runs = text["runs"] as? [[String: Any]]
+            else { continue }
+            let names = runs.compactMap { $0["text"] as? String }
+                .filter { $0 != " & " && $0 != ", " && $0 != " • " && $0 != " · " }
+            if !names.isEmpty { return names.joined() }
+        }
+        return ""
+    }
+
+    /// Extracts the playlistPanelVideoRenderer from the next endpoint response.
+    /// Handles both direct and wrapped renderer structures.
+    static func extractPanelVideoRenderer(from data: [String: Any], videoId: String) throws -> [String: Any] {
+        guard let contents = self.playlistPanelContents(from: data), let first = contents.first,
+              let renderer = self.panelVideoRenderer(in: first)
         else {
             throw YTMusicError.parseError(message: "Failed to parse song metadata for \(videoId)")
         }
-
-        // Handle both direct and wrapped renderer structures
-        // Direct: firstItem.playlistPanelVideoRenderer
-        // Wrapped: firstItem.playlistPanelVideoWrapperRenderer.primaryRenderer.playlistPanelVideoRenderer
-        if let direct = firstItem["playlistPanelVideoRenderer"] as? [String: Any] {
-            return direct
-        } else if let wrapper = firstItem["playlistPanelVideoWrapperRenderer"] as? [String: Any],
-                  let primary = wrapper["primaryRenderer"] as? [String: Any],
-                  let wrapped = primary["playlistPanelVideoRenderer"] as? [String: Any]
-        {
-            return wrapped
-        }
-
-        throw YTMusicError.parseError(message: "Failed to parse song metadata for \(videoId)")
+        return renderer
     }
 
     /// Parses the song title from the panel video renderer.
