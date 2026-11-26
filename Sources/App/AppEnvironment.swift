@@ -101,7 +101,11 @@ final class AppEnvironment: ObservableObject {
         // Native auto queue: YouTube Music's own "Up next" panel, parsed by the shared API
         // client. Kept as a closure so the player stays independent of networking.
         self.player.recommendationsProvider = { [client] videoId in
-            guard let tracks = try? await client.getWatchQueue(videoId: videoId) else { return [] }
+            guard let tracks = try? await client.getWatchQueue(videoId: videoId) else {
+                await MainActor.run { SpikeLog.shared.log("queue", "watch queue request failed for \(videoId)") }
+                return []
+            }
+            await MainActor.run { SpikeLog.shared.log("queue", "watch queue \(videoId): \(tracks.count) suggestions") }
             return tracks.map { track in
                 QueueRecommendation(
                     videoId: track.videoId,

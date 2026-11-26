@@ -185,14 +185,13 @@ extension YTMusicClient {
         return try SongMetadataParser.parse(data, videoId: videoId)
     }
 
-    /// The "Up next" panel YouTube Music shows for a song. The native player uses it to
-    /// continue with related music instead of stopping after the last explicit queue entry.
+    /// The "Up next" panel YouTube Music shows for a song. A plain `videoId` request only
+    /// returns the current track plus an automix preview, so we ask for the same `RDAMVM...`
+    /// radio playlist that the preview navigates to. That response carries ~50 related songs.
     func getWatchQueue(videoId: String) async throws -> [SongMetadataParser.WatchQueueTrack] {
         let body: [String: Any] = [
-            "videoId": videoId,
-            "enablePersistentPlaylistPanel": true,
+            "playlistId": "RDAMVM\(videoId)",
             "isAudioOnly": true,
-            "tunerSettingValue": "AUTOMIX_SETTING_NORMAL",
         ]
         let data = try await self.request("next", body: body, ttl: APICache.TTL.songMetadata)
         return SongMetadataParser.parseWatchQueue(data)

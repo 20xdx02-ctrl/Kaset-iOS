@@ -14,6 +14,10 @@ struct ArtworkView: View {
     /// Resolved once per view value instead of on every `body` pass: mapping a YouTube URL
     /// builds `URLComponents`, and a shelf re-evaluates dozens of cells while scrolling.
     private let resolvedURL: URL?
+    /// `maxresdefault` is not present for every video; fall back to the API's thumbnail.
+    private let fallbackURL: URL?
+    /// Cards use a 480px bitmap; the player keeps enough pixels for a full-screen cover.
+    private let targetPixels: Int
 
     @State private var image: PlatformImage?
 
@@ -22,8 +26,19 @@ struct ArtworkView: View {
         self.placeholder = placeholder
         self.usesFullResolution = usesFullResolution
         self.compactSize = compactSize
-        self.resolvedURL = url.map {
-            usesFullResolution ? $0 : ArtworkURL.compact($0, maxSize: compactSize)
+        self.targetPixels = usesFullResolution ? 1024 : 480
+        if let url {
+            if usesFullResolution {
+                let full = ArtworkURL.fullResolution(url)
+                self.resolvedURL = full
+                self.fallbackURL = full == url ? nil : url
+            } else {
+                self.resolvedURL = ArtworkURL.compact(url, maxSize: compactSize)
+                self.fallbackURL = nil
+            }
+        } else {
+            self.resolvedURL = nil
+            self.fallbackURL = nil
         }
     }
 
@@ -42,7 +57,10 @@ struct ArtworkView: View {
         .task(id: self.resolvedURL) {
             self.image = nil
             guard let url = self.resolvedURL else { return }
-            let loaded = await ArtworkCache.shared.image(for: url)
+            var loaded = await ArtworkCache.shared.image(for: url, targetPixels: self.targetPixels)
+            if loaded == nil, let fallback = self.fallbackURL {
+                loaded = await ArtworkCache.shared.image(for: fallback, targetPixels: self.targetPixels)
+            }
             // The cell may have been reused while the request was in flight.
             guard self.resolvedURL == url else { return }
             self.image = loaded

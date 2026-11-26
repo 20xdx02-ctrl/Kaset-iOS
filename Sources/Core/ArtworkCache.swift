@@ -97,7 +97,9 @@ final class ArtworkCache {
     static let shared = ArtworkCache()
 
     private let images = NSCache<NSString, PlatformImage>()
-    private var inFlight: [URL: Task<PlatformImage?, Never>] = [:]
+    /// Keyed by size as well as URL: the player needs a much larger bitmap than a card and must
+    /// not reuse the 480px version cached while scrolling the shelves.
+    private var inFlight: [String: Task<PlatformImage?, Never>] = [:]
     private var prefetchTask: Task<Void, Never>?
 
     private init() {
@@ -107,20 +109,23 @@ final class ArtworkCache {
         self.images.totalCostLimit = 64 * 1024 * 1024
     }
 
-    func image(for url: URL) async -> PlatformImage? {
-        let key = url.absoluteString as NSString
+    /// - Parameter targetPixels: longest side of the stored, square bitmap. Cards stay at 480;
+    ///   the full-screen player asks for 1024 so a 720px YouTube thumbnail is not blown up.
+    func image(for url: URL, targetPixels: Int = 480) async -> PlatformImage? {
+        let cacheKey = "\(targetPixels)|\(url.absoluteString)"
+        let key = cacheKey as NSString
         if let cached = self.images.object(forKey: key) { return cached }
-        if let pending = self.inFlight[url] { return await pending.value }
+        if let pending = self.inFlight[cacheKey] { return await pending.value }
 
         let task = Task.detached(priority: .utility) { () -> PlatformImage? in
             await ArtworkDecodeGate.shared.acquire()
-            let image = await ArtworkCache.fetchAndDecode(url)
+            let image = await ArtworkCache.fetchAndDecode(url, targetPixels: targetPixels)
             await ArtworkDecodeGate.shared.release()
             return image
         }
-        self.inFlight[url] = task
+        self.inFlight[cacheKey] = task
         let image = await task.value
-        self.inFlight[url] = nil
+        self.inFlight[cacheKey] = nil
         if let image {
             let bytes = Int(image.size.width * image.size.height) * 4
             self.images.setObject(image, forKey: key, cost: max(bytes, 1))
@@ -128,16 +133,25 @@ final class ArtworkCache {
         return image
     }
 
-    private nonisolated static func fetchAndDecode(_ url: URL) async -> PlatformImage? {
+    private nonisolated static func fetchAndDecode(_ url: URL, targetPixels: Int) async -> PlatformImage? {
         var request = URLRequest(url: url, cachePolicy: .returnCacheDataElseLoad, timeoutInterval: 20)
         request.httpShouldHandleCookies = false
         guard let (data, response) = try? await ArtworkHTTP.session.data(for: request),
               (response as? HTTPURLResponse)?.statusCode ?? 200 < 400,
               let image = PlatformImage(data: data)
         else { return nil }
+        if targetPixels > 480 {
+            let size = image.size
+            Task { @MainActor in
+                SpikeLog.shared.log(
+                    "art",
+                    "source \(Int(size.width))x\(Int(size.height)) ratio=\(String(format: "%.2f", size.width / size.height)) -> square"
+                )
+            }
+        }
         // UIKit lazily decodes on first draw — on the main thread, in the middle of a
         // scroll. Render once in the background and cache the small, decoded bitmap.
-        return decodedArtwork(image, maxPixelSize: 480)
+        return decodedArtwork(image, maxPixelSize: CGFloat(targetPixels))
     }
 
     /// Warms a row/list's first covers while the user is still looking at the header, so a

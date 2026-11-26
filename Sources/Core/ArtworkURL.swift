@@ -17,6 +17,33 @@ enum ArtworkURL {
         return url
     }
 
+    /// Largest public thumbnail for the full-screen player (1280x720, centre-cropped to a
+    /// square by `ArtworkCache`). The API's cover thumbnails often stop at 544px, which looks
+    /// soft when the player artwork is ~850 points wide.
+    static func fullResolution(_ url: URL) -> URL {
+        guard let host = url.host?.lowercased() else { return url }
+        if host == "i.ytimg.com" || host == "ytimg.com" || host.hasSuffix(".ytimg.com") {
+            let parts = url.path.split(separator: "/", omittingEmptySubsequences: true)
+            guard parts.count >= 3, parts[0] == "vi" || parts[0] == "vi_webp" else { return url }
+            var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+            components?.path = "/vi/\(parts[1])/maxresdefault.jpg"
+            components?.query = nil
+            return components?.url ?? url
+        }
+        // yt3 covers carry their size as a trailing `=w544-h544-...` suffix. `=s1200` returns
+        // a 1200px JPEG from the same signed path; `=w1200-h1200-rw` would return WebP, which
+        // UIImage cannot decode on iOS 15.
+        if host.contains("googleusercontent.com") || host.contains("gstatic.com") {
+            var string = url.absoluteString
+            guard let equals = string.lastIndex(of: "=") else { return url }
+            let suffix = String(string[string.index(after: equals)...])
+            guard suffix.hasPrefix("w") || suffix.hasPrefix("h") || suffix.hasPrefix("s") else { return url }
+            string = String(string[..<equals]) + "=s1200"
+            return URL(string: string) ?? url
+        }
+        return url
+    }
+
     /// `default` 120x90, `mqdefault` 320x180, `hqdefault` 480x360, `sddefault` 640x480,
     /// `maxresdefault` 1280x720. Cards request `mqdefault`; a smaller variant with `default`
     /// is already the cheapest one available, so it is left alone.

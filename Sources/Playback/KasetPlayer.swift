@@ -352,6 +352,7 @@ final class KasetPlayer: ObservableObject {
         guard !Task.isCancelled, !suggestions.isEmpty else { return }
         let known = Set(self.queue)
         let additions = suggestions.filter { !known.contains($0.videoId) }
+        SpikeLog.shared.log("queue", "extend \(videoID): \(suggestions.count) received, \(additions.count) new")
         guard !additions.isEmpty else { return }
         self.queue.append(contentsOf: additions.map(\.videoId))
         for item in additions {
