@@ -52,6 +52,35 @@ private func decodedArtwork(_ image: PlatformImage, maxPixelSize: CGFloat) -> Pl
     #endif
 }
 
+/// At most two covers are fetched/decompressed at once. An A8 iPad has two cores; decoding a
+/// dozen JPEGs in parallel to warm several shelves at once starves the main thread and is a
+/// common cause of stutter while scrolling. Waiting here does not block any thread.
+private actor ArtworkDecodeGate {
+    private var active = 0
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    static let shared = ArtworkDecodeGate()
+
+    func acquire() async {
+        if self.active < 2 {
+            self.active += 1
+            return
+        }
+        await withCheckedContinuation { continuation in
+            self.waiters.append(continuation)
+        }
+    }
+
+    func release() {
+        if self.waiters.isEmpty {
+            self.active -= 1
+        } else {
+            // The waiter takes over the slot that just freed up.
+            self.waiters.removeFirst().resume()
+        }
+    }
+}
+
 /// Shared, process-wide artwork cache. `AsyncImage` creates a fresh loader per row, so a
 /// grid re-render (scroll, tab switch, sheet) fetched and decoded every cover again. This
 /// keeps decoded images in an `NSCache`, coalesces simultaneous requests for the same URL
@@ -76,16 +105,11 @@ final class ArtworkCache {
         if let cached = self.images.object(forKey: key) { return cached }
         if let pending = self.inFlight[url] { return await pending.value }
 
-        let task = Task.detached(priority: .utility) { () -> PlatformImage? in
-            var request = URLRequest(url: url, cachePolicy: .returnCacheDataElseLoad, timeoutInterval: 20)
-            request.httpShouldHandleCookies = false
-            guard let (data, response) = try? await ArtworkHTTP.session.data(for: request),
-                  (response as? HTTPURLResponse)?.statusCode ?? 200 < 400,
-                  let image = PlatformImage(data: data)
-            else { return nil }
-            // UIKit lazily decodes on first draw — on the main thread, in the middle of a
-            // scroll. Render once in the background and cache the small, decoded bitmap.
-            return decodedArtwork(image, maxPixelSize: 480)
+        let task = Task.detached(priority: .background) { () -> PlatformImage? in
+            await ArtworkDecodeGate.shared.acquire()
+            let image = await ArtworkCache.fetchAndDecode(url)
+            await ArtworkDecodeGate.shared.release()
+            return image
         }
         self.inFlight[url] = task
         let image = await task.value
@@ -97,6 +121,18 @@ final class ArtworkCache {
         return image
     }
 
+    private nonisolated static func fetchAndDecode(_ url: URL) async -> PlatformImage? {
+        var request = URLRequest(url: url, cachePolicy: .returnCacheDataElseLoad, timeoutInterval: 20)
+        request.httpShouldHandleCookies = false
+        guard let (data, response) = try? await ArtworkHTTP.session.data(for: request),
+              (response as? HTTPURLResponse)?.statusCode ?? 200 < 400,
+              let image = PlatformImage(data: data)
+        else { return nil }
+        // UIKit lazily decodes on first draw — on the main thread, in the middle of a
+        // scroll. Render once in the background and cache the small, decoded bitmap.
+        return decodedArtwork(image, maxPixelSize: 480)
+    }
+
     /// Warms a row/list's first covers while the user is still looking at the header, so a
     /// fast scroll does not start a fresh download the instant each cell appears. Covers
     /// already cached (or in flight) are skipped by `image(for:)`.
@@ -104,7 +140,7 @@ final class ArtworkCache {
         let batch = Array(urls.prefix(limit))
         guard !batch.isEmpty else { return }
         self.prefetchTask?.cancel()
-        self.prefetchTask = Task.detached(priority: .utility) { [weak self] in
+        self.prefetchTask = Task.detached(priority: .background) { [weak self] in
             for url in batch {
                 guard !Task.isCancelled else { return }
                 await self?.image(for: url)

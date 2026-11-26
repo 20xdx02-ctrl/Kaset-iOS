@@ -6,6 +6,9 @@ struct SettingsView: View {
     /// Player updates are observed here instead of through `environment`: forwarding
     /// every player tick through the app-wide environment invalidated the whole view tree.
     @EnvironmentObject private var observedPlayer: KasetPlayer
+    /// The release watcher publishes many times during a check; observe it directly instead of
+    /// forwarding those changes through the app-wide environment.
+    @EnvironmentObject private var newReleases: NewReleaseWatcher
     @Environment(\.dismiss) private var dismiss
 
     @AppStorage(PlaybackAudioQuality.storageKey) private var audioQuality = PlaybackAudioQuality.auto.rawValue
@@ -115,7 +118,7 @@ struct SettingsView: View {
     }
 
     private var newReleasesSection: some View {
-        let watcher = self.environment.newReleases
+        let watcher = self.newReleases
         return Section {
             Toggle("Notify me at 8:00", isOn: self.$newReleaseNotifications)
                 .onChange(of: self.newReleaseNotifications) { isOn in

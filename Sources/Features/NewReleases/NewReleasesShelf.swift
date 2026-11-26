@@ -3,10 +3,12 @@ import SwiftUI
 /// "New from your artists" on Home: releases of the last 60 days, most recent first.
 /// Hidden while there is nothing to show.
 struct NewReleasesShelf: View {
-    @EnvironmentObject private var environment: AppEnvironment
+    /// Observed directly: the watcher publishes throughout a check (cursor, resolved releases,
+    /// prune). Going through the app-wide environment would invalidate every scrolling card.
+    @EnvironmentObject private var newReleases: NewReleaseWatcher
 
     var body: some View {
-        let releases = self.environment.newReleases.shelf
+        let releases = self.newReleases.shelf
         if !releases.isEmpty {
             ShelfView(title: String(localized: "New from your artists"), entities: releases.prefix(20).map(Self.entity))
         }

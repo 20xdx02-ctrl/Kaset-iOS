@@ -219,7 +219,11 @@ struct ShelfView: View {
                     .padding(.horizontal, AdaptiveLayout.horizontalPadding)
                     .padding(.vertical, 4)
                 }
+                // Only the macOS paging arrows need the row width. A GeometryReader per
+                // shelf makes every layout pass do an extra measured update on iOS.
+                #if os(macOS)
                 .onGeometryChangeCompat(of: { $0.size.width }) { self.rowWidth = $0 }
+                #endif
             }
         }
         .prefetchArtwork(self.entities.map(\.thumbnailURL), limit: 12)

@@ -22,6 +22,7 @@ struct KasetApp: App {
                 .environmentObject(environment)
                 .environmentObject(environment.player)
                 .environmentObject(environment.listening)
+                .environmentObject(environment.newReleases)
                 .tint(Color.brand)
         }
         #else
@@ -31,6 +32,7 @@ struct KasetApp: App {
                 .environmentObject(environment)
                 .environmentObject(environment.player)
                 .environmentObject(environment.listening)
+                .environmentObject(environment.newReleases)
                 .tint(Color.brand)
         }
         .defaultSize(width: 1180, height: 760)
@@ -42,6 +44,7 @@ struct KasetApp: App {
                 .environmentObject(environment)
                 .environmentObject(environment.player)
                 .environmentObject(environment.listening)
+                .environmentObject(environment.newReleases)
                 .tint(Color.brand)
                 .frame(width: 520, height: 620)
         }

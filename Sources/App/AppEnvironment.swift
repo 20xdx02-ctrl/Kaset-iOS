@@ -113,7 +113,11 @@ final class AppEnvironment: ObservableObject {
         // every SwiftUI view re-render constantly. Views that show player state observe
         // `KasetPlayer` directly through `@EnvironmentObject` instead.
         forward(mixes.objectWillChange)
-        forward(newReleases.objectWillChange)
+        // The watcher publishes on every cursor update, every resolved release and every
+        // prune while it checks the account. Forwarding that through the app-wide environment
+        // invalidated every view (including the scrolling shelves) dozens of times per check.
+        // It is injected as its own environmentObject and observed only by the Home shelf and
+        // the Settings section that display it.
         // `listening.log` changes on every playback report once a play crosses the 30 s
         // threshold, so it is observed directly by the Recap screen instead.
     }

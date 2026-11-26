@@ -56,7 +56,10 @@ extension View {
     func prefetchArtwork(_ urls: [URL?], limit: Int = 12) -> some View {
         self.onAppear {
             let compacted = urls.compactMap { $0 }.map { ArtworkURL.compact($0) }
-            ArtworkCache.shared.prefetch(compacted, limit: limit)
+            // Every visible shelf fires this at once. On a two-core device, warming a dozen
+            // covers per shelf queues more work than the cells themselves need — four is
+            // enough to hide the first horizontal page without starving visible covers.
+            ArtworkCache.shared.prefetch(compacted, limit: Platform.isMac ? limit : min(limit, 4))
         }
     }
 }
