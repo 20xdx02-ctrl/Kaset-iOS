@@ -29,6 +29,7 @@ struct NowPlayingView: View {
             let width = proxy.size.width
             let height = proxy.size.height + proxy.safeAreaInsets.top + proxy.safeAreaInsets.bottom
             let margin = width * 0.08
+            let artworkSize = width * (state.isPlaying ? 0.84 : 0.64)
             let top = -proxy.safeAreaInsets.top
 
             ZStack {
@@ -42,11 +43,13 @@ struct NowPlayingView: View {
                         .position(x: width / 2, y: top + height * 0.081)
                         .onTapGesture { self.dismiss() }
 
+                    // A fixed square frame makes `scaledToFill` crop video thumbnails (16:9)
+                    // to the album-cover shape. An aspect-ratio modifier alone left the
+                    // image's intrinsic size in charge, so wide artwork was not cropped.
                     ArtworkView(url: state.artworkURL, usesFullResolution: true)
-                        .aspectRatio(1, contentMode: .fit)
+                        .frame(width: artworkSize, height: artworkSize)
                         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                         .shadow(color: .black.opacity(0.3), radius: 22, y: 12)
-                        .frame(width: width * (state.isPlaying ? 0.84 : 0.64))
                         .animation(.spring(response: 0.5, dampingFraction: 0.7), value: state.isPlaying)
                         .position(x: width / 2, y: top + height * (state.isPlaying ? 0.325 : 0.311))
                         .animation(.spring(response: 0.5, dampingFraction: 0.7), value: state.isPlaying)
