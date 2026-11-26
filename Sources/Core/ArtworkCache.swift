@@ -105,7 +105,7 @@ final class ArtworkCache {
         if let cached = self.images.object(forKey: key) { return cached }
         if let pending = self.inFlight[url] { return await pending.value }
 
-        let task = Task.detached(priority: .background) { () -> PlatformImage? in
+        let task = Task.detached(priority: .utility) { () -> PlatformImage? in
             await ArtworkDecodeGate.shared.acquire()
             let image = await ArtworkCache.fetchAndDecode(url)
             await ArtworkDecodeGate.shared.release()
@@ -140,7 +140,7 @@ final class ArtworkCache {
         let batch = Array(urls.prefix(limit))
         guard !batch.isEmpty else { return }
         self.prefetchTask?.cancel()
-        self.prefetchTask = Task.detached(priority: .background) { [weak self] in
+        self.prefetchTask = Task.detached(priority: .utility) { [weak self] in
             for url in batch {
                 guard !Task.isCancelled else { return }
                 await self?.image(for: url)

@@ -323,7 +323,7 @@ struct PlaylistDetailView: View {
     /// Same cue as on the cards: this is the collection the player is on.
     @ViewBuilder
     private func nowPlayingBadge(_ detail: PlaylistDetail, model: PlaylistDetailModel) -> some View {
-        let identity = self.environment.player.identity
+        let identity = self.observedPlayer.identity
         let isThisList = model.watchListId.map { $0 == identity.listId } ?? false
         let isThisAlbum = detail.isAlbum
             && identity.album?.caseInsensitiveCompare(detail.title) == .orderedSame
@@ -447,11 +447,11 @@ struct TrackRow: View {
     /// This row is the track the native player is on (not another occurrence of a different
     /// song).
     private var isCurrent: Bool {
-        self.environment.player.identity.videoId == self.song.videoId
+        self.observedPlayer.identity.videoId == self.song.videoId
     }
 
     private var isPlaying: Bool {
-        self.isCurrent && self.environment.player.identity.isPlaying
+        self.isCurrent && self.observedPlayer.identity.isPlaying
     }
 
     var body: some View {
