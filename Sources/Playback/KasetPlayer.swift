@@ -67,6 +67,8 @@ final class KasetPlayer: ObservableObject {
     private var facadeQueueNeedsRefresh = true
     /// Track names for queue rows. Filled from the browse API and from stream metadata.
     private var queueMetadata: [String: QueueTrackMetadata] = [:]
+    /// The command center does not retain its targets; keep them for the app's lifetime.
+    private var remoteCommandTargets: [Any] = []
 
     init() {
         NotificationCenter.default.addObserver(
@@ -75,6 +77,42 @@ final class KasetPlayer: ObservableObject {
             name: .AVPlayerItemDidPlayToEndTime,
             object: nil
         )
+        self.configureRemoteCommands()
+    }
+
+    /// iOS only promotes an app to the Control Center / Lock Screen "Now Playing" module when
+    /// it has an active audio session, published metadata *and* remote command handlers.
+    /// The first two were already in place; without these targets the module never appeared.
+    private func configureRemoteCommands() {
+        let center = MPRemoteCommandCenter.shared()
+        self.remoteCommandTargets = [
+            center.playCommand.addTarget { [weak self] _ in
+                Task { @MainActor in self?.resume() }
+                return .success
+            },
+            center.pauseCommand.addTarget { [weak self] _ in
+                Task { @MainActor in self?.pause() }
+                return .success
+            },
+            center.togglePlayPauseCommand.addTarget { [weak self] _ in
+                Task { @MainActor in self?.togglePlayPause() }
+                return .success
+            },
+            center.nextTrackCommand.addTarget { [weak self] _ in
+                Task { @MainActor in self?.next() }
+                return .success
+            },
+            center.previousTrackCommand.addTarget { [weak self] _ in
+                Task { @MainActor in self?.previous() }
+                return .success
+            },
+            center.changePlaybackPositionCommand.addTarget { [weak self] event in
+                guard let event = event as? MPChangePlaybackPositionCommandEvent else { return .commandFailed }
+                let position = event.positionTime
+                Task { @MainActor in self?.seek(to: position) }
+                return .success
+            },
+        ]
     }
 
     deinit {
@@ -226,9 +264,11 @@ final class KasetPlayer: ObservableObject {
             }
         }
 
-        player.play()
+        // Publish the card before the first audio frame: Control Center only adopts a new
+        // Now Playing app once metadata and remote commands are both in place.
         self.nativeState.isPlaying = true
         self.publishNowPlaying()
+        player.play()
     }
 
     func togglePlayPause() {
@@ -275,7 +315,7 @@ final class KasetPlayer: ObservableObject {
     private func configureAudioSession() {
         #if os(iOS)
         let session = AVAudioSession.sharedInstance()
-        try? session.setCategory(.playback, mode: .moviePlayback, options: [])
+        try? session.setCategory(.playback, mode: .musicPlayback, options: [])
         try? session.setActive(true, options: [])
         #endif
     }
@@ -294,6 +334,7 @@ final class KasetPlayer: ObservableObject {
         var info: [String: Any] = [
             MPMediaItemPropertyTitle: self.nativeState.title ?? "",
             MPMediaItemPropertyArtist: self.nativeState.author ?? "",
+            MPNowPlayingInfoPropertyMediaType: MPMediaType.music.rawValue,
             MPNowPlayingInfoPropertyElapsedPlaybackTime: elapsed,
             MPNowPlayingInfoPropertyPlaybackRate: self.nativeState.isPlaying ? 1.0 : 0.0,
             MPNowPlayingInfoPropertyDefaultPlaybackRate: 1.0
