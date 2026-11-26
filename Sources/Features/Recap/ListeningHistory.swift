@@ -39,6 +39,8 @@ final class ListeningHistory: ObservableObject {
     @Published private(set) var accountEmail: String?
     private var lastSave = Date.distantPast
     private var hasUnsavedChanges = false
+    /// Writes happen on a serial background queue so a track change never blocks the main thread.
+    private let saveQueue = DispatchQueue(label: "dev.emoona.kaset.listening.save", qos: .utility)
     private let spikeLog = SpikeLog.shared
 
     var plays: [ListenedPlay] { self.log.plays }
@@ -97,7 +99,7 @@ final class ListeningHistory: ObservableObject {
 
     // MARK: - Recording
 
-    /// Every state the page reports goes through here.
+    /// Every meaningful state the native player reports goes through here.
     func playbackChanged(_ state: PlaybackState, at date: Date) {
         guard self.fileURL != nil, let play = self.tracker.update(with: state, at: date) else { return }
         if let index = self.log.plays.lastIndex(where: { $0.id == play.id }) {
@@ -113,22 +115,27 @@ final class ListeningHistory: ObservableObject {
         }
     }
 
-    /// App going to the background: write what is pending.
+    /// App going to the background (or account switch): write what is pending and wait for it.
     func flush() {
         if self.hasUnsavedChanges { self.save() }
+        self.saveQueue.sync { }
     }
 
     private func save() {
         self.lastSave = Date()
         self.hasUnsavedChanges = false
-        guard let fileURL = self.fileURL else { return }
-        do {
-            try FileManager.default.createDirectory(
-                at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true
-            )
-            try self.log.encoded().write(to: fileURL, options: .atomic)
-        } catch {
-            self.spikeLog.log("recap", "save failed: \(error.localizedDescription)")
+        guard let fileURL = self.fileURL, let data = try? self.log.encoded() else { return }
+        self.saveQueue.async {
+            do {
+                try FileManager.default.createDirectory(
+                    at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true
+                )
+                try data.write(to: fileURL, options: .atomic)
+            } catch {
+                DispatchQueue.main.async {
+                    SpikeLog.shared.log("recap", "save failed: \(error.localizedDescription)")
+                }
+            }
         }
     }
 

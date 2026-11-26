@@ -5,9 +5,10 @@ import WebKit
 /// channel).
 ///
 /// Each identity carries a server-issued sign-in URL; loading it in a web view that shares the
-/// account's data store switches the active delegated identity for every web view on that store,
-/// including playback. API calls additionally send `onBehalfOfUser` (see
-/// `YTMusicClient.brandIdProvider`). The chosen brand id is kept on the `GoogleAccount`.
+/// account's data store switches the active delegated identity for that Google session. This is
+/// auth only — playback uses the native AVPlayer and never loads a page. API calls additionally
+/// send `onBehalfOfUser` (see `YTMusicClient.brandIdProvider`). The chosen brand id is kept on
+/// the `GoogleAccount`.
 @MainActor
 final class AccountSwitcher: NSObject, WKNavigationDelegate {
     /// Where single-account versions kept the brand id (read once by the migration).

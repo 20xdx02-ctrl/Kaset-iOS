@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Lyrics of whatever the page is playing; follows track changes while open.
+/// Lyrics of whatever the native player is playing; follows track changes while open.
 struct LyricsSheet: View {
     @EnvironmentObject private var environment: AppEnvironment
     /// Player updates are observed here instead of through `environment`: forwarding
@@ -32,8 +32,7 @@ struct LyricsSheet: View {
         }
         .task(id: state.videoId) {
             guard let videoId = state.videoId else { return }
-            // The length picks the right LRCLib entry; the page reports it a moment after the
-            // track starts.
+            // The length picks the right LRCLib entry; it arrives with the stream metadata.
             var waits = 0
             while self.environment.player.state.duration <= 0, waits < 12 {
                 try? await Task.sleep(nanoseconds: 250000000)
@@ -108,10 +107,13 @@ struct SyncedLyricsView: View {
         }
         .task(id: self.lyrics) {
             while !Task.isCancelled {
-                let timeMs = Int(self.environment.player.state.position() * 1000)
+                // Extrapolate from the last player state instead of waiting for a new tick;
+                // 2 Hz is enough for synced lyrics and wakes the device half as often.
+                let state = self.environment.player.state
+                let timeMs = Int(state.position(at: Date()) * 1000)
                 let index = self.lyrics.currentLineIndex(at: timeMs)
                 if index != self.currentIndex { self.currentIndex = index }
-                try? await Task.sleep(nanoseconds: 200000000)
+                try? await Task.sleep(nanoseconds: 500000000)
             }
         }
     }

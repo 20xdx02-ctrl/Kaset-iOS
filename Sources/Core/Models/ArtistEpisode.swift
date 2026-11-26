@@ -6,12 +6,12 @@ import Foundation
 ///
 /// These are channel uploads — often live radio streams for channel-style
 /// artists like Lofi Girl — not formal podcast episodes (`PodcastEpisode`).
-/// Playback is via `videoId` through the standard WebView path; live items
+/// Playback is via `videoId` through the native AVPlayer path; live items
 /// have no duration and should bypass queue/seek/scrobble behavior.
 struct ArtistEpisode: Identifiable, Hashable {
     /// Stable identifier (mirrors `videoId`).
     let id: String
-    /// Video ID used for playback via the singleton WebView.
+    /// Video ID resolved by the native stream resolver.
     let videoId: String
     let title: String
     /// Typically a relative date like "5d ago" or a short date like "Apr 9".

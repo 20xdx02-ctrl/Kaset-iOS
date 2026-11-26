@@ -92,7 +92,7 @@ final class PlaylistDetailModel: ObservableObject {
     }
 }
 
-/// Playlist or album: header, play / shuffle, tracks. Every action is a web player command.
+/// Playlist or album: header, play / shuffle, tracks. Every action is a native player command.
 struct PlaylistDetailView: View {
     @EnvironmentObject private var environment: AppEnvironment
     /// Player updates are observed here instead of through `environment`: forwarding
@@ -442,8 +442,8 @@ struct TrackRow: View {
     @State private var isAddToPlaylistPresented = false
     @State private var isHovering = false
 
-    /// This row is the track the web player is on (not an ad, not another occurrence of a
-    /// different song).
+    /// This row is the track the native player is on (not another occurrence of a different
+    /// song).
     private var isCurrent: Bool {
         self.environment.player.identity.videoId == self.song.videoId
     }

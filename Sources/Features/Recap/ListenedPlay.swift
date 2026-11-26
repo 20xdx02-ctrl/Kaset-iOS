@@ -52,12 +52,12 @@ struct ListeningLog: Codable, Equatable, Sendable {
 }
 
 /// Turns the stream of playback states into plays. Pure value so it can be tested without the
-/// web view: feed it every state the page reports, store what it returns.
+/// player: feed it the states `KasetPlayer` reports, store what it returns.
 struct PlayTracker: Equatable, Sendable {
     /// A play counts after this much listening (half the song for songs shorter than a minute).
     static let threshold: TimeInterval = 30
     /// Longest gap between two reports that still counts as listening; longer gaps mean the
-    /// page was suspended or the report was lost.
+    /// app was suspended or the report was lost.
     static let maxGap: TimeInterval = 15
 
     private(set) var current: ListenedPlay?

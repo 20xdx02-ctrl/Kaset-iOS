@@ -1,10 +1,9 @@
 import SwiftUI
 
-/// The page's queue, as last reported. Everything here is a command to the page; the list
-/// updates when the page reports a new queue.
+/// The native player queue. Everything here is a command to `KasetPlayer`; the list updates
+/// when the queue actually changes, not on position ticks.
 ///
-/// Rows after the current track can be dragged to reorder (the page has no reorder primitive,
-/// so the player rewrites that part of the queue) and deleted.
+/// Rows after the current track can be dragged to reorder or deleted.
 struct QueueView: View {
     @EnvironmentObject private var environment: AppEnvironment
     /// Player updates are observed here instead of through `environment`: forwarding

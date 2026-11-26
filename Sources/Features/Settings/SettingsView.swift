@@ -59,7 +59,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Bad network")
                 } footer: {
-                    Text("Low quality is used after the music cut out for lack of data, or in Low Data Mode, until you are back on Wi-Fi. The longer buffer asks the page to load up to 4 minutes of the current song ahead; it fully applies after relaunching the app.")
+                    Text("Audio quality applies to the next track. AVPlayer handles buffering natively without loading the YouTube Music page.")
                 }
 
                 self.newReleasesSection

@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Mini player shown above the tab bar. Mirrors `PlaybackState`; buttons only send commands to
-/// the page.
+/// Mini player shown above the tab bar. Mirrors `PlaybackState`; buttons send commands to the
+/// native AVPlayer engine.
 struct MiniPlayerView: View {
     @EnvironmentObject private var environment: AppEnvironment
     /// Player updates are observed here instead of through `environment`: forwarding

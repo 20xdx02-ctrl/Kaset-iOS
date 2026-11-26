@@ -1,8 +1,8 @@
 import ImageIO
 import SwiftUI
 
-/// Rating and lyrics for the track the page is playing. The track itself comes from
-/// `PlaybackState`; this only adds what the web player does not report.
+/// Rating and lyrics for the track the native player is playing. The track itself comes from
+/// `PlaybackState`; this only adds what AVPlayer does not report.
 @MainActor
 final class NowPlayingModel: ObservableObject {
     @Published private(set) var likeStatus: LikeStatus = .indifferent
@@ -50,10 +50,11 @@ final class NowPlayingModel: ObservableObject {
             self.artworkColor = nil
             return
         }
-        guard let (data, _) = try? await URLSession.shared.data(from: url),
-              let color = Self.averageColor(of: data)
-        else { return }
-        guard self.loadedArtworkURL == url else { return }
+        guard let (data, _) = try? await URLSession.shared.data(from: url) else { return }
+        // ImageIO decode + 1×1 redraw off the main thread: this runs on every track change
+        // and used to stutter scroll/animation on older iPads.
+        let color = await Task.detached(priority: .utility) { Self.averageColor(of: data) }.value
+        guard let color, self.loadedArtworkURL == url else { return }
         self.artworkColor = color
     }
 
@@ -131,7 +132,7 @@ final class NowPlayingModel: ObservableObject {
 }
 
 /// Progress bar with a drag-to-seek gesture. While dragging it shows the finger position;
-/// on release it sends one `seek` command and keeps showing that position until the page
+/// on release it sends one `seek` command and keeps showing that position until the player
 /// reports a time near it (or a short timeout), so it does not jump back.
 struct ScrubberView: View {
     let state: PlaybackState
@@ -142,7 +143,9 @@ struct ScrubberView: View {
 
     var body: some View {
         VStack(spacing: 6) {
-            TimelineView(.periodic(from: .now, by: 0.25)) { context in
+            // The scrubber extrapolates from the last state update; 2 Hz is smooth enough
+            // for a progress bar and halves SwiftUI work on older iPads.
+            TimelineView(.periodic(from: .now, by: 0.5)) { context in
                 let duration = max(self.state.duration, 0)
                 let position = self.displayedPosition(at: context.date, duration: duration)
                 let fraction = duration > 0 ? min(max(position / duration, 0), 1) : 0
@@ -204,7 +207,7 @@ struct ScrubberView: View {
         if let dragFraction { return dragFraction * duration }
         let live = self.state.position(at: date)
         if let pending = self.pendingSeek {
-            // Hold the target until the page catches up with it (within 2 s) or the timeout.
+            // Hold the target until the player catches up with it (within 2 s) or the timeout.
             if date < pending.until, abs(live - pending.target) > 2 { return pending.target }
         }
         return live

@@ -22,7 +22,8 @@ struct NativePlaybackState {
 
 @MainActor
 final class KasetPlayer: ObservableObject {
-    @Published private(set) var nativeState = NativePlaybackState()
+    /// Internal AVPlayer bookkeeping. Not `Published`: position ticks must not invalidate views.
+    private(set) var nativeState = NativePlaybackState()
     /// Mirrored into the app's existing playback model so all screens keep working.
     @Published private(set) var state = PlaybackState()
     @Published private(set) var identity = PlaybackIdentity()
@@ -53,6 +54,9 @@ final class KasetPlayer: ObservableObject {
     private var loadTask: Task<Void, Never>?
     private var artworkTask: Task<Void, Never>?
     private var artwork: MPMediaItemArtwork?
+    /// Avoid rebuilding the `PlaybackState.queue` array when only playback state changed.
+    private var facadeQueueIDs: [String] = []
+    private var facadeQueueIndex = -1
 
     init() {
         NotificationCenter.default.addObserver(
@@ -176,14 +180,16 @@ final class KasetPlayer: ObservableObject {
                 self.publishNowPlaying()
             }
         }
+        // 1 Hz is enough for the lock screen; SwiftUI extrapolates the scrubber between ticks.
+        // Publishing `state` here would invalidate every view twice a second on slow devices.
         self.timeObserver = player.addPeriodicTimeObserver(
-            forInterval: CMTime(seconds: 0.5, preferredTimescale: 600),
+            forInterval: CMTime(seconds: 1, preferredTimescale: 600),
             queue: .main
         ) { [weak self] time in
             Task { @MainActor in
                 guard let self else { return }
                 self.nativeState.position = time.seconds
-                self.publishNowPlaying()
+                self.publishNowPlaying(syncState: false)
             }
         }
 
@@ -209,7 +215,8 @@ final class KasetPlayer: ObservableObject {
         let clamped = min(max(time, 0), self.nativeState.duration)
         player.seek(to: CMTime(seconds: clamped, preferredTimescale: 600))
         self.nativeState.position = clamped
-        self.publishNowPlaying()
+        // `seek` is async: use the requested time, not the AVPlayer clock which may still be old.
+        self.publishNowPlaying(positionOverride: clamped)
     }
 
     func stop() {
@@ -240,13 +247,21 @@ final class KasetPlayer: ObservableObject {
         #endif
     }
 
-    private func publishNowPlaying() {
-        self.syncFacade()
+    /// `syncState` is false for position-only ticks: the UI extrapolates from `state.updatedAt`,
+    /// so there is no reason to republish the whole state (and the listening history) 1×/s.
+    private func publishNowPlaying(syncState: Bool = true, positionOverride: TimeInterval? = nil) {
+        if syncState { self.syncFacade(positionOverride: positionOverride) }
         guard self.nativeState.videoID != nil else { return }
+        var elapsed = self.nativeState.position
+        if let override = positionOverride {
+            elapsed = override
+        } else if let time = self.player?.currentTime(), time.isValid, time.isFinite {
+            elapsed = time.seconds
+        }
         var info: [String: Any] = [
             MPMediaItemPropertyTitle: self.nativeState.title ?? "",
             MPMediaItemPropertyArtist: self.nativeState.author ?? "",
-            MPNowPlayingInfoPropertyElapsedPlaybackTime: self.nativeState.position,
+            MPNowPlayingInfoPropertyElapsedPlaybackTime: elapsed,
             MPNowPlayingInfoPropertyPlaybackRate: self.nativeState.isPlaying ? 1.0 : 0.0,
             MPNowPlayingInfoPropertyDefaultPlaybackRate: 1.0
         ]
@@ -267,30 +282,43 @@ final class KasetPlayer: ObservableObject {
             else { return }
             guard let self else { return }
             self.artwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
-            self.publishNowPlaying()
+            self.publishNowPlaying(syncState: false)
         }
     }
 
 
     // MARK: - Compatibility with the app's existing playback interface
 
-    private func syncFacade() {
+    private func syncFacade(positionOverride: TimeInterval? = nil) {
         var next = self.state
         next.videoId = self.nativeState.videoID
         next.title = self.nativeState.title
         next.artist = self.nativeState.author
         next.artworkURL = self.nativeState.artworkURL
         next.duration = self.nativeState.duration
-        next.position = self.nativeState.position
+        // Read the AVPlayer clock here so a pause/seek is accurate even between 1 Hz ticks.
+        if let override = positionOverride {
+            next.position = override
+        } else if let time = self.player?.currentTime(), time.isValid, time.isFinite {
+            next.position = time.seconds
+        } else {
+            next.position = self.nativeState.position
+        }
         next.isPlaying = self.nativeState.isPlaying
         next.hasMedia = self.nativeState.videoID != nil
         next.canGoNext = self.queueIndex < self.queue.count - 1
         next.canGoPrevious = self.queueIndex > 0
-        next.queue = self.queue.enumerated().map { index, id in
-            PlaybackState.QueueEntry(
-                index: index, videoId: id, title: id, artist: "",
-                isCurrent: index == self.queueIndex
-            )
+        if self.queue != self.facadeQueueIDs || self.queueIndex != self.facadeQueueIndex {
+            next.queue = self.queue.enumerated().map { index, id in
+                PlaybackState.QueueEntry(
+                    index: index, videoId: id, title: id, artist: "",
+                    isCurrent: index == self.queueIndex
+                )
+            }
+            self.facadeQueueIDs = self.queue
+            self.facadeQueueIndex = self.queueIndex
+        } else {
+            next.queue = self.state.queue
         }
         next.updatedAt = Date()
         self.state = next

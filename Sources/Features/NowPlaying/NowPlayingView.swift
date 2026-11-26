@@ -2,8 +2,8 @@ import AVKit
 import MediaPlayer
 import SwiftUI
 
-/// Full-screen player. Every control sends a command to the web player; what is drawn comes
-/// from `PlaybackState`, which only changes when the page reports back.
+/// Full-screen player. Every control sends a command to the native player; what is drawn comes
+/// from `PlaybackState`, which changes only on real player events.
 struct NowPlayingView: View {
     @EnvironmentObject private var environment: AppEnvironment
     /// Player updates are observed here instead of through `environment`: forwarding

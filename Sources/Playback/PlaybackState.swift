@@ -1,6 +1,7 @@
 import Foundation
 
-/// What the page is doing, as last reported. The web view owns the truth; this only mirrors it.
+/// Playback state shared by the UI. `KasetPlayer` fills this from AVPlayer; page-oriented
+/// field names are kept so existing screens and tests stay source-compatible.
 enum RepeatMode: String, Equatable, Sendable {
     case off, all, one
 }
@@ -50,8 +51,8 @@ struct PlaybackState: Equatable, Sendable {
         return self.duration > 0 ? min(value, self.duration) : value
     }
 
-    /// Applies a `state` message from the page script. Absent keys keep their previous value
-    /// (the page only sends the queue when it changed); `null` clears the field.
+    /// Applies a legacy page-style state message. Absent keys keep their previous value;
+    /// `null` clears the field. Kept for tests and old callers.
     func applying(_ message: [String: Any], at date: Date = Date()) -> PlaybackState {
         var next = self
         next.updatedAt = date

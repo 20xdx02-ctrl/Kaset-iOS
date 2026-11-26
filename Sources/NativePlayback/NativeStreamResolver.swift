@@ -72,11 +72,19 @@ enum NativeStreamResolver {
         // Muxed formats first (video + audio in one file): no composition, no
         // byte-range HLS, and AVPlayer can start almost immediately.
         let formats = streaming?["formats"] as? [[String: Any]] ?? []
+        // Cheapest usable formats first. The settings picker now really changes what AVPlayer
+        // fetches: Low/Normal avoid the heaviest stream on weak devices and slow links.
         let muxed = formats
             .filter { Self.isMuxed($0) && Self.directURL($0) != nil }
-            .max { Self.int($0["bitrate"]) < Self.int($1["bitrate"]) }
+            .sorted { Self.int($0["bitrate"]) < Self.int($1["bitrate"]) }
+        let format: [String: Any]?
+        switch PlaybackAudioQuality.current {
+        case .low: format = muxed.first
+        case .normal: format = muxed.isEmpty ? nil : muxed[muxed.count / 2]
+        case .auto, .high: format = muxed.last
+        }
 
-        if let format = muxed, let url = Self.directURL(format) {
+        if let format, let url = Self.directURL(format) {
             return Self.info(videoID: videoID, details: details, url: url, format: format, isHLS: false)
         }
 
