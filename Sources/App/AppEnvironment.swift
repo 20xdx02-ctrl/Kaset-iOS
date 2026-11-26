@@ -100,7 +100,7 @@ final class AppEnvironment: ObservableObject {
         self.player.onStateChange = { state, date in listening.playbackChanged(state, at: date) }
         // Native auto queue: YouTube Music's own "Up next" panel, parsed by the shared API
         // client. Kept as a closure so the player stays independent of networking.
-        self.player.recommendationsProvider = { videoId in
+        self.player.recommendationsProvider = { [client] videoId in
             guard let tracks = try? await client.getWatchQueue(videoId: videoId) else { return [] }
             return tracks.map { track in
                 QueueRecommendation(
