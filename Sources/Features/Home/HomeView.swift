@@ -9,6 +9,9 @@ struct HomeView: View {
         nonmutating set { self.modelHolder.inner = newValue }
     }
     @State private var pendingDestination: MediaEntity?
+    /// Auth state the loaded shelves belong to. Switching tabs re-runs the task; only a real
+    /// account change should force a full reload.
+    @State private var lastLoadedAuth: AuthState?
 
     var body: some View {
         NavigationStackCompat {
@@ -30,9 +33,13 @@ struct HomeView: View {
         .onAppear { self.handlePending(self.router.pendingEntity) }
         .onChange(of: self.router.pendingEntity) { self.handlePending($0) }
         .task(id: self.environment.auth.state) {
+            let authState = self.environment.auth.state
             let model = self.model ?? BrowsePageModel(type: .home, client: self.environment.client)
             self.model = model
-            await model.load(force: true)
+            // Returning to the Home tab re-runs this task with the same auth state: keep the
+            // shelves instead of re-downloading them on every tab switch.
+            await model.load(force: self.lastLoadedAuth != authState)
+            self.lastLoadedAuth = authState
         }
     }
 

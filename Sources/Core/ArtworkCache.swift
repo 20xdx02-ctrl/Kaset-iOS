@@ -27,13 +27,19 @@ private enum ArtworkHTTP {
 /// A full-size thumbnail decodes to several megabytes, while a card shows at most a couple of
 /// hundred points. Downscaling off the main thread lets the in-memory cache hold many screens
 /// of covers instead of just two or three.
+///
+/// The bitmap is always redrawn, even when it is already small enough: `UIImage(data:)` keeps
+/// the JPEG compressed and decodes it lazily on first draw — i.e. on the main thread, in the
+/// middle of a scroll. On an A8-class iPad that is one dropped frame per newly visible cover.
 private func decodedArtwork(_ image: PlatformImage, maxPixelSize: CGFloat) -> PlatformImage {
     #if os(iOS)
     let longestSide = max(image.size.width, image.size.height)
-    guard longestSide > maxPixelSize else { return image }
-    let scale = maxPixelSize / longestSide
-    let size = CGSize(width: floor(image.size.width * scale), height: floor(image.size.height * scale))
-    guard size.width >= 1, size.height >= 1 else { return image }
+    guard longestSide > 0 else { return image }
+    let scale = min(1, maxPixelSize / longestSide)
+    let size = CGSize(
+        width: max(floor(image.size.width * scale), 1),
+        height: max(floor(image.size.height * scale), 1)
+    )
     let format = UIGraphicsImageRendererFormat.default()
     format.opaque = false
     // `image.size` already holds pixels; avoid multiplying the bitmap by the screen scale again.

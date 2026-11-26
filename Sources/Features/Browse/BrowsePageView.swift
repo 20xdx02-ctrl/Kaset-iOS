@@ -185,7 +185,9 @@ struct ShelfView: View {
                                 .minimumScaleFactor(0.85)
                                 .frame(maxWidth: .infinity, minHeight: Platform.isMac ? 60 : 52)
                                 .padding(.horizontal, 8)
-                                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                                // A live blur on every chip is very expensive while the grid
+                                // scrolls; a flat hierarchical fill looks the same on iOS 15.
+                                .background(.quaternary, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                         }
                     }
                 }

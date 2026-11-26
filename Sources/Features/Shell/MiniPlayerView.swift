@@ -1,18 +1,28 @@
 import SwiftUI
+#if os(iOS)
+import UIKit
+#else
+import AppKit
+#endif
 
 /// Mini player shown above the tab bar. Mirrors `PlaybackState`; buttons send commands to the
 /// native AVPlayer engine.
+///
+/// It is drawn only while something is loaded, and with an opaque background: a full-width
+/// `.ultraThinMaterial` over a scrolling list re-blurs the content on every frame, which is
+/// the single most expensive thing an A8-class iPad can be asked to do.
 struct MiniPlayerView: View {
-    @EnvironmentObject private var environment: AppEnvironment
-    /// Player updates are observed here instead of through `environment`: forwarding
-    /// every player tick through the app-wide environment invalidated the whole view tree.
-    @EnvironmentObject private var observedPlayer: KasetPlayer
+    @EnvironmentObject private var player: KasetPlayer
 
     let onTap: () -> Void
 
     var body: some View {
-        let state = self.environment.player.state
+        if self.player.state.hasMedia {
+            self.content(self.player.state)
+        }
+    }
 
+    private func content(_ state: PlaybackState) -> some View {
         HStack(spacing: 12) {
             Button(action: self.onTap) {
                 HStack(spacing: 12) {
@@ -43,7 +53,7 @@ struct MiniPlayerView: View {
 
             Button {
                 Haptics.tap()
-                self.environment.player.togglePlayPause()
+                self.player.togglePlayPause()
             } label: {
                 Image(systemName: state.isPlaying ? "pause.fill" : "play.fill")
                     .frame(width: 32, height: 32)
@@ -53,7 +63,7 @@ struct MiniPlayerView: View {
 
             Button {
                 Haptics.tap()
-                self.environment.player.next()
+                self.player.next()
             } label: {
                 Image(systemName: "forward.fill")
                     .frame(width: 32, height: 32)
@@ -64,6 +74,15 @@ struct MiniPlayerView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
-        .background(.ultraThinMaterial)
+        .background(self.barBackground)
+        .overlay(alignment: .top) { Divider() }
+    }
+
+    private var barBackground: Color {
+        #if os(iOS)
+        Color(uiColor: .systemBackground)
+        #else
+        Color(nsColor: .windowBackgroundColor)
+        #endif
     }
 }

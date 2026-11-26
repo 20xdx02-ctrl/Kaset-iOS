@@ -20,6 +20,10 @@ final class ArtistMixLibrary: ObservableObject {
     /// Library playlists already read and found not to be mixes (their description is not
     /// fetched again).
     private var nonMixIds: Set<String>
+    /// Home's shelf is rebuilt every time it scrolls back into view. Without this throttle,
+    /// each pass re-read the whole library and fetched up to 60 playlist pages again.
+    private var lastRefresh: Date?
+    private var isRefreshing = false
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -34,6 +38,17 @@ final class ArtistMixLibrary: ObservableObject {
     }
 
     // MARK: - Reading the account
+
+    /// Refreshes at most once per `maxAge` and never concurrently. Called from the Home shelf's
+    /// `task`, which re-runs whenever the shelf scrolls back into view.
+    func refreshIfNeeded(client: YTMusicClient, maxAge: TimeInterval = 600) async {
+        guard !self.isRefreshing else { return }
+        if let last = self.lastRefresh, Date().timeIntervalSince(last) < maxAge { return }
+        self.isRefreshing = true
+        self.lastRefresh = .now
+        defer { self.isRefreshing = false }
+        await self.refresh(client: client)
+    }
 
     /// Updates the known mixes from the library: covers and titles, drops mixes whose playlist
     /// is gone, and adds mixes created on another device (found by their description).

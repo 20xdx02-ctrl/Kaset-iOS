@@ -11,11 +11,20 @@ struct ArtworkView: View {
     /// Maximum dimension for Google-hosted covers (avatars need less than album art).
     var compactSize: Int = 400
 
+    /// Resolved once per view value instead of on every `body` pass: mapping a YouTube URL
+    /// builds `URLComponents`, and a shelf re-evaluates dozens of cells while scrolling.
+    private let resolvedURL: URL?
+
     @State private var image: PlatformImage?
 
-    private var resolvedURL: URL? {
-        guard let url = self.url else { return nil }
-        return self.usesFullResolution ? url : ArtworkURL.compact(url, maxSize: self.compactSize)
+    init(url: URL?, placeholder: String = "music.note", usesFullResolution: Bool = false, compactSize: Int = 400) {
+        self.url = url
+        self.placeholder = placeholder
+        self.usesFullResolution = usesFullResolution
+        self.compactSize = compactSize
+        self.resolvedURL = url.map {
+            usesFullResolution ? $0 : ArtworkURL.compact($0, maxSize: compactSize)
+        }
     }
 
     var body: some View {

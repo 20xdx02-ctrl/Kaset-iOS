@@ -13,6 +13,25 @@ enum AddToPlaylistSource: Equatable {
     }
 }
 
+extension AddToPlaylistSource: Identifiable {
+    var id: String {
+        switch self {
+        case let .song(videoId, _): "song-\(videoId)"
+        case let .collection(id, _): "collection-\(id)"
+        }
+    }
+}
+
+/// A single add-to-playlist sheet for the whole app. Covers only say what to add; keeping the
+/// presentation here (instead of one `.sheet` per card) keeps shelf cells cheap to build.
+final class AddToPlaylistPresenter: ObservableObject {
+    @Published var source: AddToPlaylistSource?
+
+    func present(_ source: AddToPlaylistSource) {
+        self.source = source
+    }
+}
+
 @MainActor
 final class AddToPlaylistModel: ObservableObject {
     enum Phase: Equatable {

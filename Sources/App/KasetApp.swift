@@ -1,5 +1,6 @@
 #if os(iOS)
 import BackgroundTasks
+import UIKit
 #endif
 import SwiftUI
 import UserNotifications
@@ -56,6 +57,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
+        Self.configureBars()
         UNUserNotificationCenter.current().delegate = self
         // `Scene.backgroundTask` needs iOS 16; register the same identifier with
         // BGTaskScheduler so background refresh keeps working on iOS 15.
@@ -78,6 +80,25 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
             refresh.expirationHandler = { work.cancel() }
         }
         return true
+    }
+
+    /// Opaque navigation and tab bars. Their default iOS 15 appearance is a live blur that
+    /// re-samples the scrolling content on every frame; on an A8 iPad that alone drops frames
+    /// while a shelf scrolls under the bar. The app's pages use the same system background,
+    /// so the bars look unchanged.
+    private static func configureBars() {
+        let navigation = UINavigationBarAppearance()
+        navigation.configureWithOpaqueBackground()
+        UINavigationBar.appearance().standardAppearance = navigation
+        UINavigationBar.appearance().compactAppearance = navigation
+        UINavigationBar.appearance().scrollEdgeAppearance = navigation
+        UINavigationBar.appearance().isTranslucent = false
+
+        let tab = UITabBarAppearance()
+        tab.configureWithOpaqueBackground()
+        UITabBar.appearance().standardAppearance = tab
+        UITabBar.appearance().scrollEdgeAppearance = tab
+        UITabBar.appearance().isTranslucent = false
     }
 
     /// Completion handlers, not the `async` variants: an `async` delegate method completes off the

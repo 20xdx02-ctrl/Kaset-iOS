@@ -61,7 +61,7 @@ struct MixesShelf: View {
         }
         .task(id: self.environment.auth.state) {
             guard self.environment.auth.state == .signedIn else { return }
-            await library.refresh(client: self.environment.client)
+            await library.refreshIfNeeded(client: self.environment.client)
         }
     }
 

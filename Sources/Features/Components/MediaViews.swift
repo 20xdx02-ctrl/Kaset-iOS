@@ -21,18 +21,7 @@ struct MediaCard: View {
         VStack(alignment: .leading, spacing: 6) {
             // The square sets the size; the artwork only fills it. Drawn directly, a wide
             // (video) thumbnail in fill mode would widen the card past its grid column.
-            Color.clear
-                .frame(width: self.width, height: self.width)
-                .aspectRatio(1, contentMode: .fit)
-                .overlay { ArtworkView(url: self.entity.thumbnailURL) }
-                .clipShape(self.entity.isCircular ? AnyShapeCompat(Circle()) : AnyShapeCompat(RoundedRectangle(cornerRadius: 10, style: .continuous)))
-                .overlay {
-                    if self.entity.isCircular {
-                        Circle().strokeBorder(.primary.opacity(0.08))
-                    } else {
-                        RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(.primary.opacity(0.08))
-                    }
-                }
+            self.artworkWithShape
                 // A shadow on every grid cell forces an offscreen pass per row while scrolling.
                 .overlay(alignment: .bottomTrailing) { self.quickPlay }
                 .overlay(alignment: .topLeading) { self.nowPlayingBadge }
@@ -52,10 +41,40 @@ struct MediaCard: View {
         .multilineTextAlignment(.leading)
     }
 
+    /// Concrete shapes instead of an erased one: every cell builds this twice per pass.
+    @ViewBuilder
+    private var artworkWithShape: some View {
+        if self.entity.isCircular {
+            self.artwork
+                .clipShape(Circle())
+                .overlay { Circle().strokeBorder(.primary.opacity(0.08)) }
+        } else {
+            self.artwork
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .strokeBorder(.primary.opacity(0.08))
+                }
+        }
+    }
+
+    /// Fixed square in shelves, aspect-ratio square in grids. Avoids the extra `Color.clear`
+    /// layer the card used to stack under every cover.
+    @ViewBuilder
+    private var artwork: some View {
+        if let width = self.width {
+            ArtworkView(url: self.entity.thumbnailURL)
+                .frame(width: width, height: width)
+        } else {
+            ArtworkView(url: self.entity.thumbnailURL)
+                .aspectRatio(1, contentMode: .fit)
+        }
+    }
+
     /// Animated bars on the cover of whatever the player is on (song, playlist, album).
     @ViewBuilder
     private var nowPlayingBadge: some View {
-        let identity = self.environment.player.identity
+        let identity = self.observedPlayer.identity
         if self.entity.isCurrent(in: identity) {
             EqualizerView(isAnimating: identity.isPlaying, color: .white)
                 .frame(width: 16, height: 14)
@@ -115,20 +134,17 @@ struct MediaRow: View {
 /// Songs and playlists play; albums and artists open their detail screen (K8).
 struct MediaActions<Content: View>: View {
     @EnvironmentObject private var environment: AppEnvironment
-    /// Player updates are observed here instead of through `environment`: forwarding
-    /// every player tick through the app-wide environment invalidated the whole view tree.
-    @EnvironmentObject private var observedPlayer: KasetPlayer
+    /// One presenter for the whole app: a `.sheet` on every card made each shelf cell carry
+    /// its own presentation machinery, which is expensive to build while scrolling.
+    @EnvironmentObject private var addToPlaylist: AddToPlaylistPresenter
 
     let entity: MediaEntity
     @ViewBuilder var content: Content
-
-    @State private var isAddToPlaylistPresented = false
 
     private var isSignedIn: Bool { self.environment.auth.state == .signedIn }
 
     var body: some View {
         self.actions
-            .modifier(AddToPlaylistPresentation(entity: self.entity, isPresented: self.$isAddToPlaylistPresented))
     }
 
     @ViewBuilder
@@ -148,7 +164,7 @@ struct MediaActions<Content: View>: View {
                     Button("Play", systemImage: "play.fill") { self.environment.playEntity(self.entity) }
                     if self.isSignedIn {
                         Button("Add to Playlist…", systemImage: "text.badge.plus") {
-                            self.isAddToPlaylistPresented = true
+                            self.presentAddToPlaylist()
                         }
                     }
                 }
@@ -176,6 +192,17 @@ struct MediaActions<Content: View>: View {
         }
     }
 
+    private func presentAddToPlaylist() {
+        switch self.entity.target {
+        case let .song(videoId):
+            self.addToPlaylist.present(.song(videoId: videoId, title: self.entity.title))
+        case let .playlist(id), let .album(id):
+            self.addToPlaylist.present(.collection(id: id, title: self.entity.title))
+        default:
+            break
+        }
+    }
+
     @ViewBuilder
     private var menu: some View {
         Button("Play", systemImage: "play.fill", action: self.play)
@@ -199,7 +226,7 @@ struct MediaActions<Content: View>: View {
             }
             if self.isSignedIn {
                 Button("Add to Playlist…", systemImage: "text.badge.plus") {
-                    self.isAddToPlaylistPresented = true
+                    self.presentAddToPlaylist()
                 }
             }
         }
@@ -222,21 +249,3 @@ struct LoadFailureView: View {
     }
 }
 
-/// Hosts the add-to-playlist sheet for a cover: one song, or a playlist/album's songs.
-private struct AddToPlaylistPresentation: ViewModifier {
-    let entity: MediaEntity
-    @Binding var isPresented: Bool
-
-    func body(content: Content) -> some View {
-        content.sheet(isPresented: self.$isPresented) {
-            switch self.entity.target {
-            case let .song(videoId):
-                AddToPlaylistSheet(source: .song(videoId: videoId, title: self.entity.title))
-            case let .playlist(id), let .album(id):
-                AddToPlaylistSheet(source: .collection(id: id, title: self.entity.title))
-            default:
-                EmptyView()
-            }
-        }
-    }
-}
