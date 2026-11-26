@@ -213,13 +213,14 @@ struct PlaylistDetailView: View {
                 }
             }
             .listStyle(.plain)
+            .prefetchArtwork(model.tracks.map(\.thumbnailURL), limit: 16)
             .padding(.bottom, 24)
         }
     }
 
     private func header(_ detail: PlaylistDetail, model: PlaylistDetailModel) -> some View {
         VStack(spacing: 14) {
-            ArtworkView(url: detail.thumbnailURL ?? self.thumbnailURL)
+            ArtworkView(url: detail.thumbnailURL ?? self.thumbnailURL, usesFullResolution: true)
                 .frame(width: 250, height: 250)
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 .overlay(alignment: .topLeading) { self.nowPlayingBadge(detail, model: model) }
@@ -267,7 +268,7 @@ struct PlaylistDetailView: View {
     /// Kaset for macOS and Apple Music.
     private func macHeader(_ detail: PlaylistDetail, model: PlaylistDetailModel) -> some View {
         HStack(alignment: .bottom, spacing: 24) {
-            ArtworkView(url: detail.thumbnailURL ?? self.thumbnailURL)
+            ArtworkView(url: detail.thumbnailURL ?? self.thumbnailURL, usesFullResolution: true)
                 .frame(width: 220, height: 220)
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 .overlay(alignment: .topLeading) { self.nowPlayingBadge(detail, model: model) }

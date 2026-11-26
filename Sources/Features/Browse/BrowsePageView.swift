@@ -220,6 +220,7 @@ struct ShelfView: View {
                 .onGeometryChangeCompat(of: { $0.size.width }) { self.rowWidth = $0 }
             }
         }
+        .prefetchArtwork(self.entities.map(\.thumbnailURL), limit: 12)
     }
 
     // MARK: Paging (macOS)
@@ -334,6 +335,7 @@ struct SeeAllView: View {
                     }
                     .padding(AdaptiveLayout.horizontalPadding)
                 }
+                .prefetchArtwork(self.sections.flatMap { $0.items.map(\.thumbnailURL) }, limit: 16)
             }
         }
     }

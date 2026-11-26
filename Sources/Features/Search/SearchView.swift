@@ -333,6 +333,7 @@ struct SearchContent: View {
             }
         }
         .listStyle(.plain)
+        .prefetchArtwork(self.model.buckets[.all]?.items.map(\.thumbnailURL) ?? [], limit: 12)
     }
 
     private var flatList: some View {
@@ -346,6 +347,7 @@ struct SearchContent: View {
             }
         }
         .listStyle(.plain)
+        .prefetchArtwork(self.model.current.items.map(\.thumbnailURL), limit: 16)
     }
 
     @ViewBuilder

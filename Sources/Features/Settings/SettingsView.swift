@@ -319,7 +319,7 @@ private struct AccountRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            ArtworkView(url: self.account.avatarURL, placeholder: "person.crop.circle.fill")
+            ArtworkView(url: self.account.avatarURL, placeholder: "person.crop.circle.fill", compactSize: 120)
                 .frame(width: 32, height: 32)
                 .clipShape(Circle())
             VStack(alignment: .leading) {

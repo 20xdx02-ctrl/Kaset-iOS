@@ -122,7 +122,7 @@ struct ArtistDetailView: View {
 
     private func header(_ detail: ArtistDetail, model: ArtistDetailModel) -> some View {
         VStack(spacing: 14) {
-            ArtworkView(url: detail.thumbnailURL ?? detail.artist.thumbnailURL)
+            ArtworkView(url: detail.thumbnailURL ?? detail.artist.thumbnailURL, usesFullResolution: true)
                 .frame(width: 200, height: 200)
                 .clipShape(Circle())
                 .shadow(color: .black.opacity(0.25), radius: 16, y: 8)
@@ -162,7 +162,7 @@ struct ArtistDetailView: View {
     /// macOS: round portrait on the left, the name big next to it, actions underneath.
     private func macHeader(_ detail: ArtistDetail, model: ArtistDetailModel) -> some View {
         HStack(alignment: .center, spacing: 28) {
-            ArtworkView(url: detail.thumbnailURL ?? detail.artist.thumbnailURL)
+            ArtworkView(url: detail.thumbnailURL ?? detail.artist.thumbnailURL, usesFullResolution: true)
                 .frame(width: 190, height: 190)
                 .clipShape(Circle())
                 .shadow(color: .black.opacity(0.25), radius: 16, y: 8)

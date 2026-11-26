@@ -42,7 +42,7 @@ private struct SettingsSheetButton: View {
     private var label: some View {
         Group {
             if let url = self.environment.accountAvatarURL {
-                ArtworkView(url: url, placeholder: "person.crop.circle.fill")
+                ArtworkView(url: url, placeholder: "person.crop.circle.fill", compactSize: 120)
                     .frame(width: 30, height: 30)
                     .clipShape(Circle())
             } else {

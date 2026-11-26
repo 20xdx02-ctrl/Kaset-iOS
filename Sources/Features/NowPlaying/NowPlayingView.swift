@@ -42,7 +42,7 @@ struct NowPlayingView: View {
                         .position(x: width / 2, y: top + height * 0.081)
                         .onTapGesture { self.dismiss() }
 
-                    ArtworkView(url: state.artworkURL)
+                    ArtworkView(url: state.artworkURL, usesFullResolution: true)
                         .aspectRatio(1, contentMode: .fit)
                         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                         .shadow(color: .black.opacity(0.3), radius: 22, y: 12)
