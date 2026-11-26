@@ -31,6 +31,11 @@ final class KasetPlayer: ObservableObject {
     @Published private(set) var errorMessage: String?
     @Published private(set) var volume: Double = 1
     @Published private(set) var isReorderingQueue = false
+    /// Same fields the original player exposed, so the existing screens keep working.
+    @Published private(set) var lastQueueResult: (videoId: String, success: Bool, reason: String)?
+    @Published private(set) var queueNotice: String?
+    /// There is no page in the native path; debug readout shows "page non chargée".
+    @Published private(set) var pageURL: String?
     /// Listening history hook (same shape as the old web player).
     var onStateChange: ((PlaybackState, Date) -> Void)?
 
@@ -317,12 +322,16 @@ final class KasetPlayer: ObservableObject {
     func playNext(videoId: String) -> Bool {
         let index = min(self.queueIndex + 1, self.queue.count)
         self.queue.insert(videoId, at: index)
+        self.lastQueueResult = (videoId, true, "queued next")
+        self.showNotice("Added next: \(videoId)")
         self.syncFacade()
         return true
     }
 
     func addToQueue(videoId: String) -> Bool {
         self.queue.append(videoId)
+        self.lastQueueResult = (videoId, true, "queued")
+        self.showNotice("Added to queue: \(videoId)")
         self.syncFacade()
         return true
     }
@@ -363,12 +372,21 @@ final class KasetPlayer: ObservableObject {
     func applyBufferSetting() {}
     func refreshState() {}
     func recover(reason: String) {}
-    func showNotice(_ text: String) {}
+
+    func showNotice(_ text: String) {
+        self.queueNotice = text
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 3_500_000_000)
+            if self?.queueNotice == text { self?.queueNotice = nil }
+        }
+    }
 
     func checkHealth() async -> PlayerHealthReport {
         let check = PlayerHealthReport.Check(
             id: "native", ok: true, detail: "AVPlayer is active", needsTrack: false, hasTrack: true
         )
-        return PlayerHealthReport(checks: [check], date: Date())
+        return PlayerHealthReport(
+            checks: [check], hasTrack: self.nativeState.videoID != nil, date: Date()
+        )
     }
 }
