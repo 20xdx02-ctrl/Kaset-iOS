@@ -315,7 +315,7 @@ final class KasetPlayer: ObservableObject {
     private func configureAudioSession() {
         #if os(iOS)
         let session = AVAudioSession.sharedInstance()
-        try? session.setCategory(.playback, mode: .musicPlayback, options: [])
+        try? session.setCategory(.playback, options: [])
         try? session.setActive(true, options: [])
         #endif
     }
