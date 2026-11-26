@@ -434,13 +434,14 @@ struct TrackRow: View {
     /// Player updates are observed here instead of through `environment`: forwarding
     /// every player tick through the app-wide environment invalidated the whole view tree.
     @EnvironmentObject private var observedPlayer: KasetPlayer
+    /// One sheet for the whole app; a `.sheet` per row is expensive in long playlists.
+    @EnvironmentObject private var addToPlaylist: AddToPlaylistPresenter
 
     let song: Song
     var index: Int?
     var showsArtwork = true
     let onPlay: () -> Void
 
-    @State private var isAddToPlaylistPresented = false
     @State private var isHovering = false
 
     /// This row is the track the native player is on (not another occurrence of a different
@@ -520,7 +521,6 @@ struct TrackRow: View {
         .disabled(!self.song.isPlayable)
         .neutralMenuTint()
         .contextMenu { self.menuItems }
-        .addToPlaylistSheet(isPresented: self.$isAddToPlaylistPresented, videoId: self.song.videoId, title: self.song.title)
     }
 
     @ViewBuilder
@@ -531,7 +531,9 @@ struct TrackRow: View {
         }
         Button("Add to Queue", systemImage: "text.append") { self.environment.player.addToQueue(videoId: self.song.videoId) }
         if self.environment.auth.state == .signedIn {
-            Button("Add to Playlist…", systemImage: "text.badge.plus") { self.isAddToPlaylistPresented = true }
+            Button("Add to Playlist…", systemImage: "text.badge.plus") {
+                self.addToPlaylist.present(.song(videoId: self.song.videoId, title: self.song.title))
+            }
             Button("Like", systemImage: "heart") {
                 Task { try? await self.environment.client.rateSong(videoId: self.song.videoId, rating: .like) }
             }
