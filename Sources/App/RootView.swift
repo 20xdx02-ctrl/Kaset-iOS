@@ -7,7 +7,7 @@ struct RootView: View {
     @EnvironmentObject private var environment: AppEnvironment
     @Environment(\.scenePhase) private var scenePhase
     /// Shared by every cover's context menu; one sheet instead of one per card.
-    @StateObject private var addToPlaylist = AddToPlaylistPresenter()
+    @StateObject private var addToPlaylist = AddToPlaylistPresenter.shared
 
     var body: some View {
         Group {
@@ -24,7 +24,6 @@ struct RootView: View {
                 #endif
             }
         }
-        .environmentObject(self.addToPlaylist)
         .task { await environment.start() }
         .task(id: environment.auth.state) {
             guard environment.auth.state == .signedIn else { return }

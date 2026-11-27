@@ -31,6 +31,9 @@ struct MixesShelf: View {
                         let entity = Self.entity(for: mix)
                         NavigationLink { MediaEntityDestinationView(entity: entity) } label: {
                             MediaCard(entity: entity)
+                                .environment(\.mediaCardQuickPlay) {
+                                    library.play(mix, environment: self.environment)
+                                }
                                 .overlay(alignment: .top) {
                                     if library.busyPlaylistId == mix.playlistId {
                                         ProgressView()

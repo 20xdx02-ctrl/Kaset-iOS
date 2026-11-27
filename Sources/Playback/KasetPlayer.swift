@@ -40,6 +40,8 @@ final class KasetPlayer: ObservableObject {
     /// Mirrored into the app's existing playback model so all screens keep working.
     @Published private(set) var state = PlaybackState()
     @Published private(set) var identity = PlaybackIdentity()
+    /// Observed by cover cards and track rows instead of the whole player.
+    let highlight = PlaybackHighlight()
     @Published private(set) var lastMessageAt: Date?
     @Published private(set) var healthReport: PlayerHealthReport?
     @Published private(set) var errorMessage: String?
@@ -455,7 +457,10 @@ final class KasetPlayer: ObservableObject {
         var identity = self.identity
         identity.videoId = self.nativeState.videoID
         identity.isPlaying = self.nativeState.isPlaying
-        self.identity = identity
+        if identity != self.identity { self.identity = identity }
+        // Keep the lightweight highlight in sync. It is a separate observable object, so
+        // cards/rows do not redraw when the queue or other player fields change.
+        self.highlight.update(identity)
         self.lastMessageAt = Date()
         self.onStateChange?(self.state, next.updatedAt)
     }

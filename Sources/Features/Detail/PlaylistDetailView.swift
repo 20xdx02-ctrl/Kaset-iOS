@@ -95,9 +95,9 @@ final class PlaylistDetailModel: ObservableObject {
 /// Playlist or album: header, play / shuffle, tracks. Every action is a native player command.
 struct PlaylistDetailView: View {
     @EnvironmentObject private var environment: AppEnvironment
-    /// Player updates are observed here instead of through `environment`: forwarding
-    /// every player tick through the app-wide environment invalidated the whole view tree.
-    @EnvironmentObject private var observedPlayer: KasetPlayer
+    /// Only the current-video highlight, so appending tracks or changing the queue does not
+    /// rebuild the header and every visible row.
+    @EnvironmentObject private var highlight: PlaybackHighlight
     @StateObject private var modelHolder = ObservableHolder<PlaylistDetailModel>()
     private var model: PlaylistDetailModel? {
         get { self.modelHolder.inner }
@@ -196,7 +196,11 @@ struct PlaylistDetailView: View {
                     .listRowSeparator(.hidden)
                 }
                 Section {
-                    ForEach(Array(model.tracks.enumerated()), id: \.element.id) { index, song in
+                    // Indices avoid building an `enumerated()` array on every body pass. The
+                    // pagination check lives on the last visible row only; previously every
+                    // row created a `.task` that was cancelled as soon as it scrolled away.
+                    ForEach(model.tracks.indices, id: \.self) { index in
+                        let song = model.tracks[index]
                         TrackRow(song: song, index: index + 1, showsArtwork: model.detail?.isAlbum != true) {
                             self.play(song, model: model)
                         }
@@ -207,7 +211,10 @@ struct PlaylistDetailView: View {
                                 }
                             }
                         }
-                        .task { await model.loadMoreIfNeeded(after: song) }
+                        .onAppear {
+                            guard index == model.tracks.count - 1 else { return }
+                            Task { await model.loadMoreIfNeeded(after: song) }
+                        }
                     }
                     if model.isLoadingMore { ProgressView().frame(maxWidth: .infinity) }
                 }
@@ -323,7 +330,7 @@ struct PlaylistDetailView: View {
     /// Same cue as on the cards: this is the collection the player is on.
     @ViewBuilder
     private func nowPlayingBadge(_ detail: PlaylistDetail, model: PlaylistDetailModel) -> some View {
-        let identity = self.observedPlayer.identity
+        let identity = self.highlight.identity
         let isThisList = model.watchListId.map { $0 == identity.listId } ?? false
         let isThisAlbum = detail.isAlbum
             && identity.album?.caseInsensitiveCompare(detail.title) == .orderedSame
@@ -429,98 +436,130 @@ struct PlaylistDetailView: View {
 }
 
 /// A song in a list: tap plays, long press offers play next / add to queue / like.
+///
+/// The row is split into a plain play button and a trailing menu. A single `Button` used to
+/// wrap the menu as well, which nested two controls inside one tap target and rebuilt the
+/// whole menu hierarchy for every visible row.
 struct TrackRow: View {
     @EnvironmentObject private var environment: AppEnvironment
-    /// Player updates are observed here instead of through `environment`: forwarding
-    /// every player tick through the app-wide environment invalidated the whole view tree.
-    @EnvironmentObject private var observedPlayer: KasetPlayer
-    /// One sheet for the whole app; a `.sheet` per row is expensive in long playlists.
-    @EnvironmentObject private var addToPlaylist: AddToPlaylistPresenter
+    /// Only the current-video highlight is observed; queue edits and metadata changes no
+    /// longer redraw every visible row.
+    @EnvironmentObject private var highlight: PlaybackHighlight
 
     let song: Song
     var index: Int?
     var showsArtwork = true
     let onPlay: () -> Void
 
+    #if os(macOS)
     @State private var isHovering = false
+    #endif
 
     /// This row is the track the native player is on (not another occurrence of a different
     /// song).
     private var isCurrent: Bool {
-        self.observedPlayer.identity.videoId == self.song.videoId
+        self.highlight.identity.videoId == self.song.videoId
     }
 
     private var isPlaying: Bool {
-        self.isCurrent && self.observedPlayer.identity.isPlaying
+        self.isCurrent && self.highlight.identity.isPlaying
     }
 
     var body: some View {
-        Button(action: self.onPlay) {
-            HStack(spacing: 12) {
-                if self.showsArtwork {
-                    ArtworkView(url: self.song.thumbnailURL)
-                        .frame(width: AdaptiveLayout.trackArtwork, height: AdaptiveLayout.trackArtwork)
-                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                        .overlay {
-                            if self.isCurrent {
-                                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .fill(.black.opacity(0.45))
-                                EqualizerView(isAnimating: self.isPlaying, color: .white)
-                                    .frame(width: 18, height: 16)
-                            }
-                        }
-                } else {
-                    Group {
-                        if self.isCurrent {
-                            EqualizerView(isAnimating: self.isPlaying)
-                                .frame(width: 18, height: 16)
-                        } else if let index {
-                            Text("\(index)")
-                                .font(.body.monospacedDigit())
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .frame(width: 30)
-                }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(self.song.title)
-                        .font(.body)
-                        .foregroundStyle(self.isCurrent ? Color.brand : Color.primary)
-                        .lineLimit(1)
-                    if !self.song.artistsDisplay.isEmpty {
-                        Text(self.song.artistsDisplay).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
+        HStack(spacing: 12) {
+            Button(action: self.onPlay) {
+                HStack(spacing: 12) {
+                    self.leading
+                    self.title
+                    Spacer(minLength: 0)
+                    if let duration = self.song.duration {
+                        Text(Self.format(duration))
+                            .font(.subheadline.monospacedDigit())
+                            .foregroundStyle(.secondary)
                     }
                 }
-                Spacer(minLength: 0)
-                if let duration = self.song.duration {
-                    Text(Self.format(duration)).font(.subheadline.monospacedDigit()).foregroundStyle(.secondary)
-                }
-                Menu {
-                    self.menuItems
-                } label: {
-                    Image(systemName: "ellipsis")
-                        .foregroundStyle(.secondary)
-                        .frame(width: 32, height: Platform.isMac ? 28 : 44)
-                        .contentShape(Rectangle())
-                }
-                .menuIndicator(.hidden)
-                .neutralMenuTint()
-                .opacity(Platform.isMac && !self.isHovering ? 0 : 1)
+                .contentShape(Rectangle())
             }
-            .padding(.vertical, Platform.isMac ? 2 : 0)
-            .padding(.horizontal, Platform.isMac ? 6 : 0)
-            .background {
-                if Platform.isMac, self.isHovering {
-                    RoundedRectangle(cornerRadius: 6, style: .continuous).fill(.primary.opacity(0.06))
-                }
-            }
-            .contentShape(Rectangle())
+            .buttonStyle(.plain)
+            .disabled(!self.song.isPlayable)
+
+            self.menu
         }
-        .buttonStyle(.plain)
-        .onHover { self.isHovering = $0 }
-        .disabled(!self.song.isPlayable)
+        .padding(.vertical, Platform.isMac ? 2 : 0)
+        .padding(.horizontal, Platform.isMac ? 6 : 0)
+        #if os(macOS)
+        .background {
+            if self.isHovering {
+                RoundedRectangle(cornerRadius: 6, style: .continuous).fill(.primary.opacity(0.06))
+            }
+        }
+        #endif
+        .contentShape(Rectangle())
         .neutralMenuTint()
         .contextMenu { self.menuItems }
+        #if os(macOS)
+        .onHover { self.isHovering = $0 }
+        #endif
+    }
+
+    @ViewBuilder
+    private var leading: some View {
+        if self.showsArtwork {
+            ArtworkView(url: self.song.thumbnailURL)
+                .frame(width: AdaptiveLayout.trackArtwork, height: AdaptiveLayout.trackArtwork)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay {
+                    if self.isCurrent {
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(.black.opacity(0.45))
+                        EqualizerView(isAnimating: self.isPlaying, color: .white)
+                            .frame(width: 18, height: 16)
+                    }
+                }
+        } else {
+            Group {
+                if self.isCurrent {
+                    EqualizerView(isAnimating: self.isPlaying)
+                        .frame(width: 18, height: 16)
+                } else if let index {
+                    Text("\(index)")
+                        .font(.body.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(width: 30)
+        }
+    }
+
+    private var title: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(self.song.title)
+                .font(.body)
+                .foregroundStyle(self.isCurrent ? Color.brand : Color.primary)
+                .lineLimit(1)
+            if !self.song.artistsDisplay.isEmpty {
+                Text(self.song.artistsDisplay)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        }
+    }
+
+    private var menu: some View {
+        Menu {
+            self.menuItems
+        } label: {
+            Image(systemName: "ellipsis")
+                .foregroundStyle(.secondary)
+                .frame(width: 32, height: Platform.isMac ? 28 : 44)
+                .contentShape(Rectangle())
+        }
+        .menuIndicator(.hidden)
+        .neutralMenuTint()
+        #if os(macOS)
+        .opacity(self.isHovering ? 1 : 0)
+        #endif
     }
 
     @ViewBuilder
@@ -532,7 +571,7 @@ struct TrackRow: View {
         Button("Add to Queue", systemImage: "text.append") { self.environment.player.addToQueue(videoId: self.song.videoId) }
         if self.environment.auth.state == .signedIn {
             Button("Add to Playlist…", systemImage: "text.badge.plus") {
-                self.addToPlaylist.present(.song(videoId: self.song.videoId, title: self.song.title))
+                AddToPlaylistPresenter.shared.present(.song(videoId: self.song.videoId, title: self.song.title))
             }
             Button("Like", systemImage: "heart") {
                 Task { try? await self.environment.client.rateSong(videoId: self.song.videoId, rating: .like) }

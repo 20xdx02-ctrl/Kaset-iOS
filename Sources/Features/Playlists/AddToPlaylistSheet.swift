@@ -25,6 +25,10 @@ extension AddToPlaylistSource: Identifiable {
 /// A single add-to-playlist sheet for the whole app. Covers only say what to add; keeping the
 /// presentation here (instead of one `.sheet` per card) keeps shelf cells cheap to build.
 final class AddToPlaylistPresenter: ObservableObject {
+    /// Leaf views call this directly. Keeping it as an `@EnvironmentObject` in every card and
+    /// track row meant presenting the sheet invalidated every visible cell behind it.
+    static let shared = AddToPlaylistPresenter()
+
     @Published var source: AddToPlaylistSource?
 
     func present(_ source: AddToPlaylistSource) {

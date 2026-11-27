@@ -6,12 +6,25 @@ extension View {
     func neutralMenuTint() -> some View { self.tint(.primary) }
 }
 
+/// Quick-play overlay supplied by `MediaActions`. Keeping it in the environment lets the
+/// presentation-only `MediaCard` avoid observing `AppEnvironment` just to call one action.
+private struct MediaCardQuickPlayKey: EnvironmentKey {
+    static let defaultValue: (() -> Void)? = nil
+}
+
+extension EnvironmentValues {
+    var mediaCardQuickPlay: (() -> Void)? {
+        get { self[MediaCardQuickPlayKey.self] }
+        set { self[MediaCardQuickPlayKey.self] = newValue }
+    }
+}
+
 /// Square (or circular) artwork card used in shelves.
 struct MediaCard: View {
-    @EnvironmentObject private var environment: AppEnvironment
-    /// Player updates are observed here instead of through `environment`: forwarding
-    /// every player tick through the app-wide environment invalidated the whole view tree.
-    @EnvironmentObject private var observedPlayer: KasetPlayer
+    /// Only the current-video highlight is observed, not the whole player: queue edits and
+    /// playback metadata must not invalidate every card in a shelf.
+    @EnvironmentObject private var highlight: PlaybackHighlight
+    @Environment(\.mediaCardQuickPlay) private var quickPlayAction
 
     let entity: MediaEntity
     /// `nil` fills the proposed width (grids).
@@ -74,7 +87,7 @@ struct MediaCard: View {
     /// Animated bars on the cover of whatever the player is on (song, playlist, album).
     @ViewBuilder
     private var nowPlayingBadge: some View {
-        let identity = self.observedPlayer.identity
+        let identity = self.highlight.identity
         if self.entity.isCurrent(in: identity) {
             EqualizerView(isAnimating: identity.isPlaying, color: .white)
                 .frame(width: 16, height: 14)
@@ -86,23 +99,27 @@ struct MediaCard: View {
     }
 
     /// Playlists and albums open their page on tap; this plays them without opening it.
+    /// The action comes from `MediaActions` through the environment so the card itself does
+    /// not observe the whole app environment.
     @ViewBuilder
     private var quickPlay: some View {
         switch self.entity.target {
         case .playlist, .album:
-            Button {
-                Haptics.tap()
-                self.environment.playEntity(self.entity)
-            } label: {
-                Image(systemName: "play.fill")
-                    .font(.footnote.weight(.bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 32, height: 32)
-                    .background(.black.opacity(0.55), in: Circle())
+            if let action = self.quickPlayAction {
+                Button {
+                    Haptics.tap()
+                    action()
+                } label: {
+                    Image(systemName: "play.fill")
+                        .font(.footnote.weight(.bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 32, height: 32)
+                        .background(.black.opacity(0.55), in: Circle())
+                }
+                .buttonStyle(.plain)
+                .padding(8)
+                .accessibilityLabel("Play \(self.entity.title)")
             }
-            .buttonStyle(.plain)
-            .padding(8)
-            .accessibilityLabel("Play \(self.entity.title)")
         default:
             EmptyView()
         }
@@ -115,9 +132,7 @@ struct MediaRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            ArtworkView(url: self.entity.thumbnailURL)
-                .frame(width: 56, height: 56)
-                .clipShape(self.entity.isCircular ? AnyShapeCompat(Circle()) : AnyShapeCompat(RoundedRectangle(cornerRadius: 8, style: .continuous)))
+            self.artwork
             VStack(alignment: .leading, spacing: 2) {
                 Text(self.entity.title).font(.body).lineLimit(1)
                 if let subtitle = self.entity.subtitle {
@@ -128,15 +143,27 @@ struct MediaRow: View {
         }
         .contentShape(Rectangle())
     }
+
+    /// Two concrete shapes instead of `AnyShapeCompat`: search result rows are rebuilt while
+    /// typing, and erasing the shape allocates a closure for every row.
+    @ViewBuilder
+    private var artwork: some View {
+        if self.entity.isCircular {
+            ArtworkView(url: self.entity.thumbnailURL)
+                .frame(width: 56, height: 56)
+                .clipShape(Circle())
+        } else {
+            ArtworkView(url: self.entity.thumbnailURL)
+                .frame(width: 56, height: 56)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+    }
 }
 
 /// Wraps content so a tap and the long-press menu send commands to the native player.
 /// Songs and playlists play; albums and artists open their detail screen (K8).
 struct MediaActions<Content: View>: View {
     @EnvironmentObject private var environment: AppEnvironment
-    /// One presenter for the whole app: a `.sheet` on every card made each shelf cell carry
-    /// its own presentation machinery, which is expensive to build while scrolling.
-    @EnvironmentObject private var addToPlaylist: AddToPlaylistPresenter
 
     let entity: MediaEntity
     @ViewBuilder var content: Content
@@ -144,7 +171,20 @@ struct MediaActions<Content: View>: View {
     private var isSignedIn: Bool { self.environment.auth.state == .signedIn }
 
     var body: some View {
+        // Cover cards get the quick-play closure through the environment: this view already
+        // observes the app environment, so one wrapper here keeps every card out of it.
         self.actions
+            .environment(\.mediaCardQuickPlay, self.quickPlayAction)
+    }
+
+    /// Playlists and albums play from the overlay button on their cover.
+    private var quickPlayAction: (() -> Void)? {
+        switch self.entity.target {
+        case .playlist, .album:
+            return { self.environment.playEntity(self.entity) }
+        default:
+            return nil
+        }
     }
 
     @ViewBuilder
@@ -195,9 +235,9 @@ struct MediaActions<Content: View>: View {
     private func presentAddToPlaylist() {
         switch self.entity.target {
         case let .song(videoId):
-            self.addToPlaylist.present(.song(videoId: videoId, title: self.entity.title))
+            AddToPlaylistPresenter.shared.present(.song(videoId: videoId, title: self.entity.title))
         case let .playlist(id), let .album(id):
-            self.addToPlaylist.present(.collection(id: id, title: self.entity.title))
+            AddToPlaylistPresenter.shared.present(.collection(id: id, title: self.entity.title))
         default:
             break
         }

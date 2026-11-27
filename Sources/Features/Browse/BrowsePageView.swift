@@ -97,7 +97,13 @@ struct BrowsePageView<Header: View>: View {
                         self.header
                         ForEach(self.model.sections) { section in
                             ShelfView(section: section)
-                                .task { await self.model.loadMoreIfNeeded(after: section) }
+                                // Pagination only depends on the last shelf appearing.
+                                // A `.task` on every shelf was cancelled and restarted
+                                // whenever the lazy stack recycled one.
+                                .onAppear {
+                                    guard section.id == self.model.sections.last?.id else { return }
+                                    Task { await self.model.loadMoreIfNeeded(after: section) }
+                                }
                         }
                         if self.model.isLoadingMore {
                             ProgressView().frame(maxWidth: .infinity)
@@ -119,30 +125,14 @@ extension BrowsePageView where Header == EmptyView {
 
 /// Titled shelf. Mood / genre sections are a grid of chips (3 to 4 columns depending on the
 /// width); everything else is a horizontally scrolling row of artwork cards.
+///
+/// The two layouts live in separate views so a normal shelf carries no mood-grid state, and
+/// changing `isExpanded` or measuring the chip grid cannot invalidate the horizontal shelves.
 struct ShelfView: View {
     let title: String
     let entities: [MediaEntity]
     /// Shown as a "See all" link next to the title.
     var seeAll: SeeAllDestination?
-
-    private static let chipMinimumWidth: CGFloat = AdaptiveLayout.chipMinimumWidth
-    private static let chipSpacing: CGFloat = 10
-    private static let collapsedRows = 3
-
-    @State private var isExpanded = false
-    @State private var gridWidth: CGFloat = 0
-    /// Card the row is scrolled to, and the row's width (macOS paging arrows).
-    @State private var scrolledID: MediaEntity.ID?
-    @State private var rowWidth: CGFloat = 0
-
-    /// How many chips fit on a line, matching what the adaptive grid will lay out.
-    private var columns: Int {
-        guard self.gridWidth > 0 else { return 3 }
-        let fit = Int((self.gridWidth + Self.chipSpacing) / (Self.chipMinimumWidth + Self.chipSpacing))
-        return max(fit, 1)
-    }
-
-    private var collapsedLimit: Int { self.columns * Self.collapsedRows }
 
     private var isMoodGrid: Bool {
         !self.entities.isEmpty && self.entities.allSatisfy {
@@ -152,85 +142,72 @@ struct ShelfView: View {
     }
 
     var body: some View {
+        if self.isMoodGrid {
+            MoodShelf(title: self.title, entities: self.entities, seeAll: self.seeAll)
+        } else {
+            MediaShelf(title: self.title, entities: self.entities, seeAll: self.seeAll)
+        }
+    }
+}
+
+/// Horizontal row of artwork cards. On iOS this view has no state at all; the macOS paging
+/// arrows are compiled out entirely.
+private struct MediaShelf: View {
+    let title: String
+    let entities: [MediaEntity]
+    let seeAll: SeeAllDestination?
+
+    #if os(macOS)
+    /// Card the row is scrolled to, and the row's width (paging arrows).
+    @State private var scrolledID: MediaEntity.ID?
+    @State private var rowWidth: CGFloat = 0
+    #endif
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             if !self.title.isEmpty {
-                HStack(alignment: .firstTextBaseline) {
-                    Text(self.title)
-                        .font(.title2.weight(.bold))
-                        .accessibilityAddTraits(.isHeader)
-                    Spacer(minLength: 8)
-                    if let seeAll {
-                        NavigationLink("See all") { SeeAllView(destination: seeAll) }
-                            .font(.subheadline)
-                    }
-                    if Platform.isMac, !self.isMoodGrid, self.canPage {
-                        self.pagingArrows
+                self.header
+            }
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(alignment: .top, spacing: AdaptiveLayout.cardSpacing) {
+                    ForEach(self.entities) { entity in
+                        MediaActions(entity: entity) { MediaCard(entity: entity) }
                     }
                 }
                 .padding(.horizontal, AdaptiveLayout.horizontalPadding)
+                .padding(.vertical, 4)
             }
-            if self.isMoodGrid {
-                let canCollapse = self.entities.count > self.collapsedLimit
-                let visible = (self.isExpanded || !canCollapse) ? self.entities : Array(self.entities.prefix(self.collapsedLimit))
-                LazyVGrid(
-                    columns: [GridItem(.adaptive(minimum: Self.chipMinimumWidth), spacing: Self.chipSpacing)],
-                    spacing: Self.chipSpacing
-                ) {
-                    ForEach(visible) { entity in
-                        MediaActions(entity: entity) {
-                            Text(entity.title)
-                                .font(.subheadline.weight(.semibold))
-                                .multilineTextAlignment(.center)
-                                .lineLimit(2)
-                                .minimumScaleFactor(0.85)
-                                .frame(maxWidth: .infinity, minHeight: Platform.isMac ? 60 : 52)
-                                .padding(.horizontal, 8)
-                                // A live blur on every chip is very expensive while the grid
-                                // scrolls; a flat hierarchical fill looks the same on iOS 15.
-                                .background(.quaternary, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                        }
-                    }
-                }
-                .padding(.horizontal, AdaptiveLayout.horizontalPadding)
-                .onGeometryChangeCompat(of: { $0.size.width - 2 * AdaptiveLayout.horizontalPadding }) { self.gridWidth = $0 }
-
-                if canCollapse {
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.2)) { self.isExpanded.toggle() }
-                    } label: {
-                        Label(
-                            self.isExpanded ? "Show less" : "Show all (\(self.entities.count))",
-                            systemImage: self.isExpanded ? "chevron.up" : "chevron.down"
-                        )
-                        .font(.subheadline.weight(.semibold))
-                        .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.plain)
-                    .padding(.top, 2)
-                    .accessibilityHint(self.isExpanded ? "Collapses the list" : "Shows every item")
-                }
-            } else {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    LazyHStack(alignment: .top, spacing: AdaptiveLayout.cardSpacing) {
-                        ForEach(self.entities) { entity in
-                            MediaActions(entity: entity) { MediaCard(entity: entity) }
-                        }
-                    }
-                    .padding(.horizontal, AdaptiveLayout.horizontalPadding)
-                    .padding(.vertical, 4)
-                }
-                // Only the macOS paging arrows need the row width. A GeometryReader per
-                // shelf makes every layout pass do an extra measured update on iOS.
-                #if os(macOS)
-                .onGeometryChangeCompat(of: { $0.size.width }) { self.rowWidth = $0 }
-                #endif
-            }
+            // Only the macOS paging arrows need the row width. A GeometryReader per shelf
+            // makes every layout pass do an extra measured update on iOS.
+            #if os(macOS)
+            .onGeometryChangeCompat(of: { $0.size.width }) { self.rowWidth = $0 }
+            #endif
         }
         .prefetchArtwork(self.entities.map(\.thumbnailURL), limit: 12)
     }
 
+    private var header: some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(self.title)
+                .font(.title2.weight(.bold))
+                .accessibilityAddTraits(.isHeader)
+            Spacer(minLength: 8)
+            if let seeAll {
+                NavigationLink("See all") { SeeAllView(destination: seeAll) }
+                    .font(.subheadline)
+            }
+            #if os(macOS)
+            if self.canPage {
+                self.pagingArrows
+            }
+            #endif
+        }
+        .padding(.horizontal, AdaptiveLayout.horizontalPadding)
+    }
+
     // MARK: Paging (macOS)
 
+    #if os(macOS)
     /// Cards fully visible in the row.
     private var cardsPerPage: Int {
         let step = AdaptiveLayout.cardWidth + AdaptiveLayout.cardSpacing
@@ -273,6 +250,93 @@ struct ShelfView: View {
         .opacity(enabled ? 1 : 0.35)
         .help(Text(label))
         .accessibilityLabel(Text(label))
+    }
+    #endif
+}
+
+/// Collapsible grid of mood / genre chips. Only these sections need the expansion and width
+/// state.
+private struct MoodShelf: View {
+    let title: String
+    let entities: [MediaEntity]
+    let seeAll: SeeAllDestination?
+
+    private static let chipMinimumWidth: CGFloat = AdaptiveLayout.chipMinimumWidth
+    private static let chipSpacing: CGFloat = 10
+    private static let collapsedRows = 3
+
+    @State private var isExpanded = false
+    @State private var gridWidth: CGFloat = 0
+
+    /// How many chips fit on a line, matching what the adaptive grid will lay out.
+    private var columns: Int {
+        guard self.gridWidth > 0 else { return 3 }
+        let fit = Int((self.gridWidth + Self.chipSpacing) / (Self.chipMinimumWidth + Self.chipSpacing))
+        return max(fit, 1)
+    }
+
+    private var collapsedLimit: Int { self.columns * Self.collapsedRows }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if !self.title.isEmpty {
+                self.header
+            }
+            let canCollapse = self.entities.count > self.collapsedLimit
+            let visible = (self.isExpanded || !canCollapse) ? self.entities : Array(self.entities.prefix(self.collapsedLimit))
+            LazyVGrid(
+                columns: [GridItem(.adaptive(minimum: Self.chipMinimumWidth), spacing: Self.chipSpacing)],
+                spacing: Self.chipSpacing
+            ) {
+                ForEach(visible) { entity in
+                    MediaActions(entity: entity) {
+                        Text(entity.title)
+                            .font(.subheadline.weight(.semibold))
+                            .multilineTextAlignment(.center)
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.85)
+                            .frame(maxWidth: .infinity, minHeight: Platform.isMac ? 60 : 52)
+                            .padding(.horizontal, 8)
+                            // A live blur on every chip is very expensive while the grid
+                            // scrolls; a flat hierarchical fill looks the same on iOS 15.
+                            .background(.quaternary, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    }
+                }
+            }
+            .padding(.horizontal, AdaptiveLayout.horizontalPadding)
+            .onGeometryChangeCompat(of: { $0.size.width - 2 * AdaptiveLayout.horizontalPadding }) { self.gridWidth = $0 }
+
+            if canCollapse {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) { self.isExpanded.toggle() }
+                } label: {
+                    Label(
+                        self.isExpanded ? "Show less" : "Show all (\(self.entities.count))",
+                        systemImage: self.isExpanded ? "chevron.up" : "chevron.down"
+                    )
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 2)
+                .accessibilityHint(self.isExpanded ? "Collapses the list" : "Shows every item")
+            }
+        }
+        .prefetchArtwork(self.entities.map(\.thumbnailURL), limit: 12)
+    }
+
+    private var header: some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(self.title)
+                .font(.title2.weight(.bold))
+                .accessibilityAddTraits(.isHeader)
+            Spacer(minLength: 8)
+            if let seeAll {
+                NavigationLink("See all") { SeeAllView(destination: seeAll) }
+                    .font(.subheadline)
+            }
+        }
+        .padding(.horizontal, AdaptiveLayout.horizontalPadding)
     }
 }
 

@@ -29,7 +29,9 @@ struct NowPlayingView: View {
             let width = proxy.size.width
             let height = proxy.size.height + proxy.safeAreaInsets.top + proxy.safeAreaInsets.bottom
             let margin = width * 0.08
-            let artworkSize = width * (state.isPlaying ? 0.84 : 0.64)
+            // Smaller than the original 0.84/0.64 fractions so the cover leaves more
+            // breathing room above the title and does not crowd landscape layouts.
+            let artworkSize = width * (state.isPlaying ? 0.70 : 0.53)
             let top = -proxy.safeAreaInsets.top
 
             ZStack {
